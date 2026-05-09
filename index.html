@@ -2,25 +2,29 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Mascot Horror - Close-up Kill</title>
+    <title>Mascot Horror - Tape & Lore</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Courier New', monospace; }
         #viewport { position: fixed; width: 100%; height: 100%; box-shadow: inset 0 0 180px #000; pointer-events: none; z-index: 5; }
-        #fade-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #200; /* 襲われた時の赤黒い暗転 */
-            opacity: 0; pointer-events: none; z-index: 100;
-            transition: opacity 1s ease-in;
+        #fade-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #200; opacity: 0; pointer-events: none; z-index: 100; transition: opacity 1s; }
+        
+        /* 字幕（カセット用） */
+        #subtitle-box {
+            position: absolute; bottom: 15%; width: 100%; text-align: center;
+            color: #ffaa00; font-size: 1.4em; text-shadow: 2px 2px 5px #000;
+            opacity: 0; transition: opacity 0.5s; z-index: 20;
+            padding: 0 50px; box-sizing: border-box;
         }
-        #ui { position: absolute; top: 20px; left: 20px; color: #fff; z-index: 10; border-left: 3px solid #f00; padding-left: 10px; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #fff; z-index: 10; border-left: 3px solid #ffaa00; padding-left: 10px; }
     </style>
 </head>
 <body>
     <div id="viewport"></div>
     <div id="fade-overlay"></div>
+    <div id="subtitle-box"></div>
     <div id="ui">
         <div>STATUS: <span id="status">探索中</span></div>
-        <div style="font-size: 0.8em; color: #888;">赤いトリガーに触れると演出開始</div>
+        <div id="log-info" style="font-size: 0.8em; color: #ffaa00;">[?] カセットを探せ</div>
     </div>
 
     <script type="importmap">
@@ -42,39 +46,75 @@
         document.body.appendChild(renderer.domElement);
 
         // --- ライティング ---
-        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.45));
         const flashlight = new THREE.SpotLight(0xffffff, 250, 50, Math.PI/6, 0.4);
         camera.add(flashlight);
         flashlight.target.position.set(0, 0, -1);
         camera.add(flashlight.target);
         scene.add(camera);
 
+        // --- カセットテープ (アイテム) ---
+        const tapeGroup = new THREE.Group();
+        const tapeBody = new THREE.Mesh(
+            new THREE.BoxGeometry(0.6, 0.1, 0.4),
+            new THREE.MeshStandardMaterial({color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 0.5})
+        );
+        const tapeLabel = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.4, 0.25),
+            new THREE.MeshStandardMaterial({color: 0xffffff})
+        );
+        tapeLabel.rotation.x = -Math.PI/2;
+        tapeLabel.position.y = 0.06;
+        tapeGroup.add(tapeBody, tapeLabel);
+        tapeGroup.position.set(-3, 0.1, 5); // プレイヤーの近くに配置
+        scene.add(tapeGroup);
+
         // --- 敵 (Mascot) ---
         const enemy = new THREE.Group();
-        // より「顔」を強調したデザイン
         const head = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.8), new THREE.MeshStandardMaterial({color: 0x440000}));
-        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.1), new THREE.MeshStandardMaterial({color: 0x000000}));
-        mouth.position.set(0, -0.4, 0.4);
-        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xff0000, emissiveIntensity: 5}));
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xff0000, emissiveIntensity: 2}));
         eye.position.set(0.3, 0.3, 0.4);
         const eye2 = eye.clone(); eye2.position.x = -0.3;
-        enemy.add(head, mouth, eye, eye2);
-        enemy.position.set(0, 1.4, -5); 
+        enemy.add(head, eye, eye2);
+        enemy.position.set(0, 1.4, -15); // 遠くに配置
         scene.add(enemy);
 
-        // --- 地面とトリガー ---
+        // --- 地面とトリガー（死のトラップ） ---
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x111111}));
         floor.rotation.x = -Math.PI/2;
         scene.add(floor);
 
-        const trigger = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, 1), new THREE.MeshStandardMaterial({color: 0xff0000, emissive: 0xff0000}));
-        trigger.position.set(0, 0.1, 0);
-        scene.add(trigger);
+        const killTrigger = new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 2), new THREE.MeshStandardMaterial({color: 0x330000, transparent: true, opacity: 0.5}));
+        killTrigger.position.set(0, 0.1, -10);
+        scene.add(killTrigger);
 
-        // --- 状態管理 ---
+        // --- システム変数 ---
         let isDead = false;
         let deathTimer = 0;
         const keys = {};
+        const subBox = document.getElementById('subtitle-box');
+
+        const playTape = () => {
+            tapeGroup.visible = false;
+            document.getElementById('log-info').innerText = "[!] 再生中...";
+            
+            const messages = [
+                "『...聞こえるか？この施設の地下には「彼」が眠っている。』",
+                "『決して、奥の赤いエリアには近づくな。』",
+                "『...もし「彼」の目が光ったら、もう手遅れだ。』"
+            ];
+            
+            messages.forEach((msg, i) => {
+                setTimeout(() => {
+                    subBox.innerText = msg;
+                    subBox.style.opacity = 1;
+                    if(i === messages.length - 1) {
+                        setTimeout(() => subBox.style.opacity = 0, 3000);
+                        document.getElementById('log-info').innerText = "[✓] ログ回収済み";
+                    }
+                }, i * 3500);
+            });
+        };
 
         window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
@@ -83,7 +123,6 @@
             requestAnimationFrame(animate);
 
             if (!isDead) {
-                // 通常移動
                 const speed = 0.15;
                 if(keys['KeyW']) camera.translateZ(-speed);
                 if(keys['KeyS']) camera.translateZ(speed);
@@ -92,40 +131,30 @@
                 if(keys['ArrowLeft'] || keys['KeyJ']) camera.rotation.y += 0.04;
                 if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
 
-                // トリガー接触
-                if (camera.position.distanceTo(trigger.position) < 1.2) {
+                // カセット回収判定
+                if (tapeGroup.visible && camera.position.distanceTo(tapeGroup.position) < 1.5) {
+                    playTape();
+                }
+
+                // 死亡判定
+                if (camera.position.distanceTo(killTrigger.position) < 2) {
                     isDead = true;
-                    document.getElementById('status').innerText = "捕まった！";
-                    document.getElementById('status').style.color = "#f00";
                 }
             } else {
-                // --- ジャンプスケア演出 ---
+                // --- ジャンプスケア・シーケンス ---
                 deathTimer += 0.016;
+                camera.lookAt(enemy.position);
 
-                // 1. カメラを敵の目に固定
-                const eyePos = new THREE.Vector3().copy(enemy.position);
-                eyePos.y += 0.3; // 目の高さに合わせる
-                camera.lookAt(eyePos);
-
-                // 2. 敵が至近距離まで突進
-                // 距離0.75まで近づく（これ以上近いとモデルの中に入ってしまうため）
-                const dist = enemy.position.distanceTo(camera.position);
-                if (dist > 0.75) {
+                if (enemy.position.distanceTo(camera.position) > 0.8) {
                     const moveDir = new THREE.Vector3().subVectors(camera.position, enemy.position).normalize();
-                    enemy.position.add(moveDir.multiplyScalar(0.45)); // 素早く接近
+                    enemy.position.add(moveDir.multiplyScalar(0.5));
                 }
 
-                // 3. 接触後の揺れと暗転
                 if (deathTimer > 0.4) {
-                    // カメラをランダムに激しく揺らす
-                    camera.position.x += (Math.random() - 0.5) * 0.25;
-                    camera.position.y += (Math.random() - 0.5) * 0.25;
-                    
-                    // 徐々に画面を赤黒く染める
+                    camera.position.x += (Math.random() - 0.5) * 0.2;
+                    camera.position.y += (Math.random() - 0.5) * 0.2;
                     document.getElementById('fade-overlay').style.opacity = 1;
                 }
-
-                // 終了処理
                 if (deathTimer > 2.0) location.reload();
             }
 
