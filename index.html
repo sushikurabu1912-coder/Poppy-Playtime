@@ -2,155 +2,158 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Poppy Playtime - Cube Pack Edition</title>
+    <title>Poppy Playtime - Cube Monster Edition</title>
     <style>
-        body { margin: 0; background: #000; color: #eee; font-family: sans-serif; overflow: hidden; }
-        #game-view { 
-            position: relative; width: 800px; height: 500px; margin: 50px auto; 
-            border: 8px solid #333; overflow: hidden; background: #0a0a0a;
-            perspective: 1000px; /* 3D効果用 */
-        }
+        body { margin: 0; background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; }
         
-        #stage {
-            position: absolute; width: 2000px; height: 100%; left: -600px;
-            transition: left 0.1s linear;
+        #viewport {
+            perspective: 800px;
+            width: 100vw; height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            background: radial-gradient(circle, #111 0%, #000 100%);
         }
 
-        /* ターゲット */
-        .target { 
-            position: absolute; width: 100px; height: 100px; top: 180px;
-            border: 5px solid; display: flex; align-items: center; justify-content: center;
-            font-weight: bold; background: rgba(255,255,255,0.1);
+        #world {
+            position: relative;
+            width: 0; height: 0;
+            transform-style: preserve-3d;
+            transition: transform 0.1s linear;
         }
-        #target-l { left: 450px; border-color: #00aaff; color: #00aaff; }
-        #target-r { left: 1450px; border-color: #ff4400; color: #ff4400; }
-        .active { background: #fff !important; transform: scale(1.1); }
 
-        #huggy { position: absolute; left: 950px; bottom: 100px; font-size: 100px; transition: transform 0.1s; }
+        /* 3D構造の共通設定 */
+        .cube-base { position: absolute; transform-style: preserve-3d; }
+        .face { position: absolute; border: 1px solid rgba(255,255,255,0.2); box-sizing: border-box; }
 
-        /* 立方体（GrabPack）のスタイル */
-        .cube-container {
-            position: absolute; bottom: -20px; width: 60px; height: 60px;
-            transform-style: preserve-3d; transition: transform 0.2s ease-out;
-            z-index: 100;
+        /* 通路 */
+        .floor { width: 1000px; height: 3000px; transform: rotateX(90deg) translate(-500px, -1500px) translateZ(-200px); background: repeating-linear-gradient(#222 0 2px, transparent 2px 100px), repeating-linear-gradient(90deg, #222 0 2px, transparent 2px 100px); }
+
+        /* 巨大な青い立方体モンスター (旧ハギー) */
+        #monster-cube {
+            width: 200px; height: 200px;
+            transform: translate3d(-100px, -250px, -1500px);
         }
-        #cube-l { left: 150px; transform: translateY(200px) rotateX(20deg) rotateY(20deg); }
-        #cube-r { right: 150px; transform: translateY(200px) rotateX(20deg) rotateY(-20deg); }
+        .monster-face { width: 200px; height: 200px; background: rgba(0, 50, 200, 0.9); border: 4px solid #00f; display: flex; align-items: center; justify-content: center; font-size: 80px; }
 
-        .cube {
-            position: relative; width: 60px; height: 60px; transform-style: preserve-3d;
-        }
-        .face {
-            position: absolute; width: 60px; height: 60px; border: 2px solid rgba(255,255,255,0.5);
-            line-height: 60px; text-align: center; font-size: 30px;
-        }
-        /* 面の配置 */
-        .front  { transform: translateZ(30px); }
-        .back   { transform: rotateY(180deg) translateZ(30px); }
-        .right  { transform: rotateY(90deg) translateZ(30px); }
-        .left   { transform: rotateY(-90deg) translateZ(30px); }
-        .top    { transform: rotateX(90deg) translateZ(30px); }
-        .bottom { transform: rotateX(-90deg) translateZ(30px); }
+        /* グラブパック立方体 (手前) */
+        .hand-cube { position: absolute; width: 80px; height: 80px; transform-style: preserve-3d; bottom: 50px; transition: transform 0.15s ease-out; }
+        #cube-l { left: 20%; transform: rotateX(-10deg) rotateY(20deg) translateZ(100px); }
+        #cube-r { right: 20%; transform: rotateX(-10deg) rotateY(-20deg) translateZ(100px); }
+        .hand-face { width: 80px; height: 80px; opacity: 0.8; border: 2px solid #fff; }
 
-        .blue-cube .face { background: rgba(0, 100, 255, 0.8); }
-        .red-cube .face { background: rgba(255, 50, 0, 0.8); }
+        /* 立方体の面配置用汎用クラス */
+        .f-front  { transform: translateZ(var(--z)); }
+        .f-back   { transform: rotateY(180deg) translateZ(var(--z)); }
+        .f-top    { transform: rotateX(90deg) translateZ(var(--z)); }
+        .f-bottom { transform: rotateX(-90deg) translateZ(var(--z)); }
+        .f-left   { transform: rotateY(-90deg) translateZ(var(--z)); }
+        .f-right  { transform: rotateY(90deg) translateZ(var(--z)); }
 
-        #ui { text-align: center; margin-top: 20px; }
+        #ui { position: fixed; top: 20px; width: 100%; text-align: center; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <h2>CUBE-PACK SYSTEM</h2>
-    <p>Move: <kbd>←</kbd> <kbd>→</kbd> | Launch: <kbd>A</kbd> (Blue) <kbd>D</kbd> (Red)</p>
-    <h3 id="status">READY</h3>
+    <h1>CUBE MONSTER SURVIVAL</h1>
+    <p>ROTATE: [←][→] | LAUNCH: [A] (Blue) [D] (Red)</p>
+    <h2 id="status" style="color: #0f0;">CORE STABLE</h2>
 </div>
 
-<div id="game-view">
-    <div id="stage">
-        <div id="target-l" class="target">BLUE</div>
-        <div id="target-r" class="target">RED</div>
-        <div id="huggy">👹</div>
-    </div>
-    
-    <!-- 青い立方体 -->
-    <div id="cube-l" class="cube-container blue-cube">
-        <div class="cube">
-            <div class="face front">■</div><div class="face back"></div>
-            <div class="face right"></div><div class="face left"></div>
-            <div class="face top"></div><div class="face bottom"></div>
+<div id="viewport">
+    <div id="world">
+        <div class="floor"></div>
+        
+        <!-- モンスター立方体 -->
+        <div id="monster-cube" class="cube-base">
+            <div class="face monster-face f-front" style="--z: 100px;">👁️👁️</div>
+            <div class="face monster-face f-back"  style="--z: 100px;"></div>
+            <div class="face monster-face f-top"   style="--z: 100px;"></div>
+            <div class="face monster-face f-bottom" style="--z: 100px;"></div>
+            <div class="face monster-face f-left"  style="--z: 100px;"></div>
+            <div class="face monster-face f-right" style="--z: 100px;"></div>
         </div>
     </div>
+</div>
 
-    <!-- 赤い立方体 -->
-    <div id="cube-r" class="cube-container red-cube">
-        <div class="cube">
-            <div class="face front">■</div><div class="face back"></div>
-            <div class="face right"></div><div class="face left"></div>
-            <div class="face top"></div><div class="face bottom"></div>
-        </div>
+<!-- プレイヤーの手 -->
+<div id="cube-l" class="hand-cube">
+    <div class="cube-base">
+        <div class="face hand-face f-front" style="background:#05f; --z:40px;"></div>
+        <div class="face hand-face f-back"  style="background:#05f; --z:40px;"></div>
+        <div class="face hand-face f-top"   style="background:#05f; --z:40px;"></div>
+        <div class="face hand-face f-bottom" style="background:#05f; --z:40px;"></div>
+        <div class="face hand-face f-left"  style="background:#05f; --z:40px;"></div>
+        <div class="face hand-face f-right" style="background:#05f; --z:40px;"></div>
+    </div>
+</div>
+
+<div id="cube-r" class="hand-cube">
+    <div class="cube-base">
+        <div class="face hand-face f-front" style="background:#f20; --z:40px;"></div>
+        <div class="face hand-face f-back"  style="background:#f20; --z:40px;"></div>
+        <div class="face hand-face f-top"   style="background:#f20; --z:40px;"></div>
+        <div class="face hand-face f-bottom" style="background:#f20; --z:40px;"></div>
+        <div class="face hand-face f-left"  style="background:#f20; --z:40px;"></div>
+        <div class="face hand-face f-right" style="background:#f20; --z:40px;"></div>
     </div>
 </div>
 
 <script>
-    const stage = document.getElementById('stage');
-    const huggy = document.getElementById('huggy');
-    const statusText = document.getElementById('status');
+    const world = document.getElementById('world');
+    const monster = document.getElementById('monster-cube');
+    const status = document.getElementById('status');
     const cubeL = document.getElementById('cube-l');
     const cubeR = document.getElementById('cube-r');
 
-    let cameraX = -600;
-    let huggyScale = 1;
+    let rotY = 0;
+    let monsterZ = -1500;
     let gameOver = false;
     const keys = {};
 
     window.addEventListener('keydown', e => {
         keys[e.code] = true;
-        if (gameOver) return;
-        if (e.code === 'KeyA') launchCube(cubeL, 'L');
-        if (e.code === 'KeyD') launchCube(cubeR, 'R');
+        if (!gameOver) {
+            if (e.code === 'KeyA') shoot(cubeL, 'L');
+            if (e.code === 'KeyD') shoot(cubeR, 'R');
+        }
     });
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    function launchCube(cube, side) {
-        // 発射アニメーション（回転しながら飛ぶ）
-        cube.style.transform = `translateY(-350px) rotateX(360deg) rotateY(360deg)`;
+    function shoot(cube, side) {
+        const original = cube.style.transform;
+        cube.style.transform += " translateZ(-1000px) rotateX(360deg)";
         
         setTimeout(() => {
-            const targetPos = (side === 'L') ? (450 + cameraX) : (1450 + cameraX);
-            const target = document.getElementById(side === 'L' ? 'target-l' : 'target-r');
-
-            if (targetPos > 300 && targetPos < 500) {
-                target.classList.add('active');
-                huggyScale = Math.max(1, huggyScale - 0.5);
-                statusText.innerText = "HIT!";
-                setTimeout(() => target.classList.remove('active'), 200);
+            // モンスターが正面にいるときに撃てばノックバック
+            // モンスターは中央付近にいるので、視点が中央（rotY=0付近）ならヒット
+            if (Math.abs(rotY) < 15) {
+                monsterZ -= 300;
+                status.innerText = "CRITICAL REJECTION";
+                status.style.color = "#fff";
+                setTimeout(() => { status.innerText = "CORE STABLE"; status.style.color = "#0f0"; }, 500);
             }
-
-            // 戻る
-            setTimeout(() => {
-                cube.style.transform = side === 'L' 
-                    ? "translateY(200px) rotateX(20deg) rotateY(20deg)" 
-                    : "translateY(200px) rotateX(20deg) rotateY(-20deg)";
-            }, 200);
-        }, 200);
+            setTimeout(() => { cube.style.transform = original; }, 200);
+        }, 150);
     }
 
     function update() {
         if (gameOver) return;
-        if (keys['ArrowLeft']) cameraX += 10;
-        if (keys['ArrowRight']) cameraX -= 10;
-        cameraX = Math.min(Math.max(cameraX, -1200), 0);
-        stage.style.left = cameraX + "px";
 
-        huggyScale += 0.005;
-        huggy.style.transform = `scale(${huggyScale})`;
+        if (keys['ArrowLeft']) rotY += 2;
+        if (keys['ArrowRight']) rotY -= 2;
+        rotY = Math.max(Math.min(rotY, 50), -50);
+        world.style.transform = `rotateY(${rotY}deg)`;
 
-        if (huggyScale > 5) {
+        monsterZ += 4;
+        monster.style.transform = `translate3d(-100px, -250px, ${monsterZ}px)`;
+
+        if (monsterZ > -300) {
             gameOver = true;
-            statusText.innerText = "GAME OVER";
-            huggy.innerHTML = "💀";
+            status.innerText = "CONNECTION LOST - CUBE BREACH";
+            status.style.color = "red";
+            document.body.style.backgroundColor = "#200";
         }
+
         requestAnimationFrame(update);
     }
     update();
