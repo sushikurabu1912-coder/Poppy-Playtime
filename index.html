@@ -2,24 +2,24 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>3D Horror - Full Visibility Version</title>
+    <title>3D Horror - Collision & Visibility Fix</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; }
+        body { margin: 0; overflow: hidden; background-color: #111; font-family: sans-serif; }
         #ui {
             position: absolute; top: 20px; left: 20px; color: #0f0;
             background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px;
             border: 1px solid #0f0; pointer-events: none;
         }
-        .info { font-size: 0.9em; margin-bottom: 5px; }
+        #debug { position: absolute; bottom: 10px; left: 10px; color: #555; font-size: 10px; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div class="info"><b>STATUS:</b> EXPLORING</div>
-        <div class="info"><b>MISSION:</b> ヒューズ(水色)を3つ集めろ</div>
-        <div class="info"><b>FUSES:</b> <span id="fuse-count">0</span> / 3</div>
-        <div class="info" style="color: #666;">[WASD] 移動 [IJKL/方向キー] 視点</div>
+        <div style="font-weight: bold; margin-bottom: 5px;">--- 探索モード ---</div>
+        <div>MISSION: ヒューズを3つ探せ</div>
+        <div>FUSES: <span id="fuse-count">0</span> / 3</div>
     </div>
+    <div id="debug">Camera Position: <span id="pos-display">0, 0, 0</span></div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -28,53 +28,46 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- シーン・カメラ ---
+        // 1. シーンとカメラ
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111); // 真っ黒ではなく濃いグレーに
-        scene.fog = new THREE.Fog(0x111111, 5, 50);
+        scene.background = new THREE.Color(0x0a0a0a);
+        // 霧を少し遠くして、視界を確保する
+        scene.fog = new THREE.Fog(0x0a0a0a, 1, 60);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // 【重要】カメラを少し後ろ・上に配置（壁との重なりを回避）
-        camera.position.set(0, 1.6, 10); 
+        // 【重要】カメラを少し高い位置、少し手前に配置
+        camera.position.set(0, 1.6, 15); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- ライト設定（常時ON・バッテリーなし） ---
-        // 環境光：これがあるおかげでライトがなくても「何があるか」は見えます
-        const ambient = new THREE.AmbientLight(0xffffff, 0.4); 
+        // 2. ライト（常時点灯・高輝度）
+        const ambient = new THREE.AmbientLight(0xffffff, 0.3); 
         scene.add(ambient);
 
-        // 懐中電灯：強度を大幅に上げ、常にカメラに追従
-        const flashlight = new THREE.SpotLight(0xffffff, 150); // 強度150
-        flashlight.angle = Math.PI / 4;
-        flashlight.penumbra = 0.3;
-        flashlight.decay = 1; // 光の減衰率（1は明るめ）
-        flashlight.distance = 50; 
+        const flashlight = new THREE.SpotLight(0xffffff, 150, 50, Math.PI / 4, 0.5);
         flashlight.castShadow = true;
         camera.add(flashlight);
         flashlight.target.position.set(0, 0, -1);
         camera.add(flashlight.target);
         scene.add(camera);
 
-        // --- 地面 ---
+        // 3. 地面（確実に映るように明るめのグリッド）
         const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(100, 100),
-            new THREE.MeshStandardMaterial({ color: 0x333333 })
+            new THREE.PlaneGeometry(200, 200),
+            new THREE.MeshStandardMaterial({ color: 0x222222 })
         );
         floor.rotation.x = -Math.PI / 2;
         floor.receiveShadow = true;
         scene.add(floor);
-        // 地面にグリッドを表示（動いていることを確認するため）
-        scene.add(new THREE.GridHelper(100, 50, 0x444444, 0x222222));
+        scene.add(new THREE.GridHelper(200, 40, 0x00ff00, 0x222222)); // 緑のグリッドで座標感覚を出す
 
-        // --- 壁と当たり判定 ---
+        // 4. 壁の配置と当たり判定
         const walls = [];
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x666666 });
-        const createWall = (w, h, d, x, z) => {
-            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+        const createWall = (w, h, d, x, z, color=0x555555) => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
             m.position.set(x, h/2, z);
             m.castShadow = true;
             m.receiveShadow = true;
@@ -82,36 +75,34 @@
             walls.push(m);
         };
 
-        // マップ構成：カメラの初期位置(0,0,10)の周りには壁を置かない
-        createWall(20, 4, 1, 0, -5);   // 正面の壁
-        createWall(1, 4, 20, -10, -15); // 左の壁
-        createWall(1, 4, 20, 10, -15);  // 右の壁
+        // カメラの目の前に壁を置かないよう、離して配置
+        createWall(10, 4, 1, -10, 0); // 左前の壁
+        createWall(10, 4, 1, 10, 0);  // 右前の壁
+        createWall(1, 4, 20, 0, -10); // 正面奥へ続く壁
 
-        // --- ヒューズ (Fuses) ---
+        // 5. ヒューズ（目立つように発光）
         const fuses = [];
-        const fusePos = [{x:-8, z:-20}, {x:8, z:-20}, {x:0, z:-30}];
+        const fusePos = [{x:-15, z:-15}, {x:15, z:-15}, {x:0, z:-40}];
         fusePos.forEach(p => {
             const f = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.3, 0.3, 1),
-                new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff })
+                new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 5 })
             );
             f.position.set(p.x, 0.5, p.z);
             scene.add(f);
             fuses.push(f);
         });
 
-        // --- 操作と更新 ---
+        // 6. 操作
         const keys = {};
         let collected = 0;
-
         window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
         function animate() {
             requestAnimationFrame(animate);
-
             const prevPos = camera.position.clone();
-            const speed = 0.12;
+            const speed = 0.15;
 
             // 移動
             if(keys['KeyW']) camera.translateZ(-speed);
@@ -119,7 +110,7 @@
             if(keys['KeyA']) camera.translateX(-speed);
             if(keys['KeyD']) camera.translateX(speed);
             
-            // 視点回転
+            // 視点（キーボード）
             if(keys['ArrowLeft'] || keys['KeyJ']) camera.rotation.y += 0.04;
             if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
             if(keys['ArrowUp'] || keys['KeyI']) camera.rotation.x += 0.03;
@@ -129,7 +120,7 @@
             camera.position.y = 1.6;
 
             // 当たり判定
-            const playerBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.6, 2, 0.6));
+            const playerBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.7, 2, 0.7));
             for(let wall of walls) {
                 if(playerBox.intersectsBox(new THREE.Box3().setFromObject(wall))) {
                     camera.position.copy(prevPos);
@@ -137,14 +128,18 @@
                 }
             }
 
-            // アイテム回収
+            // ヒューズ回収
             fuses.forEach(f => {
-                if(f.visible && camera.position.distanceTo(f.position) < 1.5) {
+                if(f.visible && camera.position.distanceTo(f.position) < 2) {
                     f.visible = false;
                     collected++;
                     document.getElementById('fuse-count').innerText = collected;
                 }
             });
+
+            // デバッグ表示
+            document.getElementById('pos-display').innerText = 
+                `${Math.round(camera.position.x)}, ${Math.round(camera.position.z)}`;
 
             renderer.render(scene, camera);
         }
