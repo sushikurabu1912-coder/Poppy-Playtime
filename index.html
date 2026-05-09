@@ -16,7 +16,7 @@
 
 body{
     overflow:hidden;
-    background:black;
+    background:#111;
 }
 
 canvas{
@@ -43,8 +43,8 @@ canvas{
     position:absolute;
     top:20px;
     left:20px;
-    width:430px;
-    background:rgba(0,0,0,0.75);
+    width:420px;
+    background:rgba(0,0,0,0.6);
     border:1px solid rgba(255,255,255,0.2);
     padding:16px;
     line-height:1.8;
@@ -56,7 +56,7 @@ canvas{
     left:50%;
     bottom:40px;
     transform:translateX(-50%);
-    background:rgba(0,0,0,0.85);
+    background:rgba(0,0,0,0.8);
     padding:12px 20px;
     opacity:0;
     transition:0.3s;
@@ -82,7 +82,7 @@ canvas{
     position:absolute;
     right:20px;
     bottom:20px;
-    background:rgba(0,0,0,0.75);
+    background:rgba(0,0,0,0.7);
     border:1px solid rgba(255,255,255,0.3);
     padding:10px 14px;
     font-size:14px;
@@ -92,8 +92,8 @@ canvas{
     position:absolute;
     right:20px;
     top:20px;
-    width:290px;
-    background:rgba(0,0,0,0.75);
+    width:280px;
+    background:rgba(0,0,0,0.6);
     border:1px solid rgba(255,255,255,0.2);
     padding:14px;
     line-height:1.8;
@@ -124,12 +124,10 @@ canvas{
 
 施設の電力を復旧する。<br><br>
 
-・監視室へ送電<br>
-・倉庫へ送電<br>
-・中央ブレーカー起動<br>
+・左の倉庫へ行く<br>
+・右の監視室へ行く<br>
+・中央ブレーカーを起動<br>
 ・管理室へ入る<br><br>
-
-暗闇で動く存在に注意。<br><br>
 
 WASD : 移動<br>
 SHIFT : ダッシュ<br>
@@ -162,9 +160,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 const scene = new THREE.Scene();
 
 scene.fog = new THREE.Fog(
-    0x000000,
-    10,
-    55
+    0x555555,
+    40,
+    90
 );
 
 const camera = new THREE.PerspectiveCamera(
@@ -174,7 +172,7 @@ const camera = new THREE.PerspectiveCamera(
     1000
 );
 
-camera.position.set(0,2,18);
+camera.position.set(0,2,22);
 
 const renderer = new THREE.WebGLRenderer({
     antialias:true
@@ -187,7 +185,7 @@ renderer.setSize(
 
 renderer.shadowMap.enabled = true;
 
-renderer.setClearColor(0x000000);
+renderer.setClearColor(0x555555);
 
 document.body.appendChild(
     renderer.domElement
@@ -195,21 +193,21 @@ document.body.appendChild(
 
 const ambient =
 new THREE.AmbientLight(
-    0x555555,
-    0.7
+    0xffffff,
+    1.3
 );
 
 scene.add(ambient);
 
-const moon =
+const sun =
 new THREE.DirectionalLight(
-    0xaaccff,
-    0.55
+    0xffffff,
+    1.2
 );
 
-moon.position.set(10,20,10);
+sun.position.set(20,40,20);
 
-scene.add(moon);
+scene.add(sun);
 
 const flashlight =
 new THREE.SpotLight(
@@ -217,7 +215,7 @@ new THREE.SpotLight(
     0
 );
 
-flashlight.angle = 0.75;
+flashlight.angle = 0.8;
 flashlight.penumbra = 0.6;
 flashlight.distance = 70;
 
@@ -228,9 +226,9 @@ let flashlightOn = false;
 
 const floor =
 new THREE.Mesh(
-    new THREE.PlaneGeometry(120,120),
+    new THREE.PlaneGeometry(160,160),
     new THREE.MeshStandardMaterial({
-        color:0x353535
+        color:0x6b6b6b
     })
 );
 
@@ -241,21 +239,20 @@ scene.add(floor);
 const colliders = [];
 
 function createWall(
-    x,y,z,w,h,d,color=0x222222
+    x,y,z,w,h,d,color=0x333333
 ){
 
     const mesh =
     new THREE.Mesh(
-        new THREE.BoxGeometry(w,h,d),
+        new THREE.BoxGeometry(
+            w,h,d
+        ),
         new THREE.MeshStandardMaterial({
             color
         })
     );
 
     mesh.position.set(x,y,z);
-
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
 
     scene.add(mesh);
 
@@ -267,138 +264,141 @@ function createWall(
 }
 
 function createRoom(
-    centerX,
-    centerZ,
+    x,
+    z,
     width,
     depth,
     color
 ){
 
-    const wallThickness = 1;
-    const wallHeight = 5;
+    const h = 5;
 
     createWall(
-        centerX,
-        wallHeight/2,
-        centerZ - depth/2,
+        x,
+        h/2,
+        z - depth/2,
         width,
-        wallHeight,
-        wallThickness,
+        h,
+        1,
         color
     );
 
     createWall(
-        centerX,
-        wallHeight/2,
-        centerZ + depth/2,
+        x,
+        h/2,
+        z + depth/2,
         width,
-        wallHeight,
-        wallThickness,
+        h,
+        1,
         color
     );
 
     createWall(
-        centerX - width/2,
-        wallHeight/2,
-        centerZ,
-        wallThickness,
-        wallHeight,
+        x - width/2,
+        h/2,
+        z,
+        1,
+        h,
         depth,
         color
     );
 
     createWall(
-        centerX + width/2,
-        wallHeight/2,
-        centerZ,
-        wallThickness,
-        wallHeight,
+        x + width/2,
+        h/2,
+        z,
+        1,
+        h,
         depth,
         color
     );
 }
 
 createRoom(
-    -18,
-    -8,
-    14,
-    14,
-    0x181818
+    -25,
+    0,
+    18,
+    18,
+    0x884444
 );
 
 createRoom(
+    25,
+    0,
     18,
-    -8,
-    14,
-    14,
-    0x181818
+    18,
+    0x444488
 );
 
 createRoom(
     0,
-    18,
-    16,
-    12,
-    0x1f1f1f
+    -22,
+    20,
+    14,
+    0x448844
 );
 
-createWall(0,2.5,-28,60,5,1);
-createWall(-30,2.5,0,1,5,60);
-createWall(30,2.5,0,1,5,60);
-createWall(0,2.5,30,60,5,1);
+createWall(0,2.5,40,90,5,1);
+createWall(-45,2.5,0,1,5,80);
+createWall(45,2.5,0,1,5,80);
+createWall(0,2.5,-40,90,5,1);
 
 const hallwayLight =
 new THREE.PointLight(
     0xffffff,
-    0.35,
-    30
+    2.5,
+    80
 );
 
-hallwayLight.position.set(0,6,0);
+hallwayLight.position.set(
+    0,
+    10,
+    0
+);
 
 scene.add(hallwayLight);
 
 const storageLight =
 new THREE.PointLight(
-    0xffaa66,
+    0xffaa88,
     0,
-    18
+    30
 );
 
 storageLight.position.set(
-    -18,
-    4,
-    -8
+    -25,
+    5,
+    0
 );
 
 scene.add(storageLight);
 
 const cameraLight =
 new THREE.PointLight(
-    0x66aaff,
+    0x88aaff,
     0,
-    18
+    30
 );
 
 cameraLight.position.set(
-    18,
-    4,
-    -8
+    25,
+    5,
+    0
 );
 
 scene.add(cameraLight);
 
 const managerLight =
 new THREE.PointLight(
-    0x00ffaa,
+    0x88ffcc,
     0,
-    18
+    30
 );
 
 managerLight.position.set(
     0,
-    4,
-    18
+    5,
+    -22
 );
 
 scene.add(managerLight);
@@ -412,9 +412,9 @@ function createSwitch(
     const mesh =
     new THREE.Mesh(
         new THREE.BoxGeometry(
-            1,
-            1,
-            1
+            1.5,
+            1.5,
+            1.5
         ),
         new THREE.MeshStandardMaterial({
             color,
@@ -435,41 +435,41 @@ function createSwitch(
 
 const storageSwitch =
 createSwitch(
-    -18,
-    -2,
-    0xff5500
+    -25,
+    8,
+    0xff6600
 );
 
 const cameraSwitch =
 createSwitch(
-    18,
-    -2,
-    0x0055ff
+    25,
+    8,
+    0x0066ff
 );
 
 const breakerSwitch =
 createSwitch(
     0,
-    10,
+    -8,
     0x00ffaa
 );
 
 const managerDoor =
 new THREE.Mesh(
     new THREE.BoxGeometry(
-        4,
+        5,
         4,
         0.5
     ),
     new THREE.MeshStandardMaterial({
-        color:0x555555
+        color:0x777777
     })
 );
 
 managerDoor.position.set(
     0,
     2,
-    12
+    -15
 );
 
 scene.add(managerDoor);
@@ -507,9 +507,7 @@ enemyHead.position.y = 3;
 
 const eye1 =
 new THREE.Mesh(
-    new THREE.SphereGeometry(
-        0.12
-    ),
+    new THREE.SphereGeometry(0.12),
     new THREE.MeshBasicMaterial({
         color:0xff0000
     })
@@ -521,8 +519,7 @@ eye1.position.set(
     0.8
 );
 
-const eye2 =
-eye1.clone();
+const eye2 = eye1.clone();
 
 eye2.position.x = 0.2;
 
@@ -534,7 +531,7 @@ enemy.add(eye2);
 enemy.position.set(
     0,
     0,
-    -20
+    28
 );
 
 scene.add(enemy);
@@ -553,7 +550,7 @@ document.addEventListener(
             !flashlightOn;
 
             flashlight.intensity =
-            flashlightOn ? 10 : 0;
+            flashlightOn ? 9 : 0;
 
             document.getElementById(
                 "flashlight"
@@ -596,7 +593,7 @@ function showMessage(text){
 }
 
 showMessage(
-    "施設の電力が停止している"
+    "各エリアの電力を復旧せよ"
 );
 
 let storagePowered = false;
@@ -616,10 +613,8 @@ function updatePowerUI(){
     監視室 :
     ${cameraPowered ? "ONLINE" : "OFFLINE"}<br>
 
-    中央ブレーカー :
-    ${breakerPowered ? "ONLINE" : "LOCKED"}<br><br>
-
-    廊下は最低電力のみ供給中
+    管理室 :
+    ${breakerPowered ? "OPEN" : "LOCKED"}
     `;
 }
 
@@ -635,15 +630,12 @@ function distance(a,b){
 function interact(){
 
     if(
-        distance(
-            camera,
-            storageSwitch
-        ) < 3
+        distance(camera,storageSwitch) < 3
     ){
 
         storagePowered = true;
 
-        storageLight.intensity = 2.5;
+        storageLight.intensity = 4;
 
         storageSwitch.material.emissive
         .setHex(0xff6600);
@@ -656,15 +648,12 @@ function interact(){
     }
 
     if(
-        distance(
-            camera,
-            cameraSwitch
-        ) < 3
+        distance(camera,cameraSwitch) < 3
     ){
 
         cameraPowered = true;
 
-        cameraLight.intensity = 2.5;
+        cameraLight.intensity = 4;
 
         cameraSwitch.material.emissive
         .setHex(0x0066ff);
@@ -677,10 +666,7 @@ function interact(){
     }
 
     if(
-        distance(
-            camera,
-            breakerSwitch
-        ) < 3
+        distance(camera,breakerSwitch) < 3
     ){
 
         if(
@@ -690,12 +676,12 @@ function interact(){
 
             breakerPowered = true;
 
-            managerLight.intensity = 3;
+            managerLight.intensity = 4;
 
             managerDoor.position.y = -5;
 
             showMessage(
-                "中央ブレーカー起動。管理室が解放された"
+                "管理室が解放された"
             );
 
             updatePowerUI();
@@ -709,10 +695,7 @@ function interact(){
     }
 
     if(
-        distance(
-            camera,
-            managerDoor
-        ) < 5 &&
+        distance(camera,managerDoor) < 5 &&
         breakerPowered
     ){
 
@@ -741,14 +724,14 @@ function checkCollision(position){
     const playerBox =
     new THREE.Box3(
         new THREE.Vector3(
-            position.x - 0.4,
+            position.x - 0.5,
             position.y - 1,
-            position.z - 0.4
+            position.z - 0.5
         ),
         new THREE.Vector3(
-            position.x + 0.4,
+            position.x + 0.5,
             position.y + 1,
-            position.z + 0.4
+            position.z + 0.5
         )
     );
 
@@ -764,61 +747,6 @@ function checkCollision(position){
     return false;
 }
 
-function updateEnemy(delta){
-
-    const direction =
-    new THREE.Vector3();
-
-    camera.getWorldDirection(
-        direction
-    );
-
-    const enemyDirection =
-    enemy.position.clone()
-    .sub(camera.position)
-    .normalize();
-
-    const flashlightDot =
-    direction.dot(enemyDirection);
-
-    const enemyDistance =
-    enemy.position.distanceTo(
-        camera.position
-    );
-
-    const flashlightHits =
-    flashlightOn &&
-    flashlightDot > 0.92 &&
-    enemyDistance < 15;
-
-    if(!flashlightHits){
-
-        const moveDir =
-        camera.position.clone()
-        .sub(enemy.position)
-        .normalize();
-
-        enemy.position.add(
-            moveDir.multiplyScalar(
-                delta * 1.5
-            )
-        );
-    }
-
-    enemy.lookAt(camera.position);
-
-    if(enemyDistance < 1.5){
-
-        document.getElementById(
-            "fade"
-        ).style.opacity = 1;
-
-        showMessage(
-            "GAME OVER"
-        );
-    }
-}
-
 const clock =
 new THREE.Clock();
 
@@ -831,14 +759,14 @@ function animate(){
     const delta =
     clock.getDelta();
 
-    let moveSpeed = 4;
+    let moveSpeed = 5;
 
     if(
         keys["ShiftLeft"] &&
         stamina > 0
     ){
 
-        moveSpeed = 8;
+        moveSpeed = 9;
 
         stamina -= 28 * delta;
 
@@ -858,19 +786,19 @@ function animate(){
     stamina + "%";
 
     if(keys["ArrowLeft"]){
-        yaw += 1.5 * delta;
+        yaw += 1.8 * delta;
     }
 
     if(keys["ArrowRight"]){
-        yaw -= 1.5 * delta;
+        yaw -= 1.8 * delta;
     }
 
     if(keys["ArrowUp"]){
-        pitch += 1.2 * delta;
+        pitch += 1.3 * delta;
     }
 
     if(keys["ArrowDown"]){
-        pitch -= 1.2 * delta;
+        pitch -= 1.3 * delta;
     }
 
     pitch = Math.max(
@@ -960,8 +888,6 @@ function animate(){
             direction.multiplyScalar(10)
         )
     );
-
-    updateEnemy(delta);
 
     renderer.render(
         scene,
