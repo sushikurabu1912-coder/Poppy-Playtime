@@ -2,29 +2,31 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>3D Horror - Mystery & Stealth</title>
+    <title>3D Horror - Key & Door Gimmick</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; font-family: 'Courier New', monospace; }
         #ui {
             position: absolute; top: 20px; left: 20px;
             color: #fff; text-shadow: 2px 2px 5px #000; pointer-events: none;
-            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; border-left: 5px solid #0f0;
+            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; border-left: 5px solid #00f;
         }
         #center-msg {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #ffff00; font-size: 1.5em; text-align: center; text-shadow: 2px 2px 5px #000;
+            color: #00ffff; font-size: 1.5em; text-align: center; text-shadow: 2px 2px 5px #000;
             pointer-events: none; opacity: 0; transition: opacity 0.5s;
         }
         .status { font-size: 1.1em; margin-bottom: 5px; }
+        #inventory { margin-top: 10px; color: #0af; font-weight: bold; }
         #battery-bar { width: 100px; height: 8px; background: #333; display: inline-block; }
-        #battery-fill { height: 100%; background: #0f0; width: 100%; transition: width 0.3s; }
+        #battery-fill { height: 100%; background: #0f0; width: 100%; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div class="status">OBJECTIVE: <span id="task">発電機を探せ</span></div>
+        <div class="status">MISSION: <span id="task">発電機(黄)を探せ</span></div>
         <div class="status">ENERGY</div>
         <div id="battery-bar"><div id="battery-fill"></div></div>
+        <div id="inventory">ITEM: なし</div>
     </div>
     <div id="center-msg"></div>
 
@@ -35,10 +37,10 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- シーン設定 ---
+        // --- 基本設定 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x111111);
-        scene.fog = new THREE.Fog(0x111111, 2, 35);
+        scene.fog = new THREE.Fog(0x111111, 2, 40);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -46,7 +48,6 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- 照明 ---
         const ambient = new THREE.AmbientLight(0x444444);
         scene.add(ambient);
 
@@ -64,24 +65,7 @@
         scene.add(floor);
         scene.add(new THREE.GridHelper(100, 40, 0x333333, 0x222222));
 
-        // --- ギミック：危険エリア（敵が起動する場所） ---
-        const dangerZone = new THREE.Mesh(
-            new THREE.PlaneGeometry(15, 15),
-            new THREE.MeshStandardMaterial({ color: 0xff0000, transparent: true, opacity: 0.2 })
-        );
-        dangerZone.rotation.x = -Math.PI / 2;
-        dangerZone.position.set(20, 0.02, -20);
-        scene.add(dangerZone);
-
-        // --- ギミック：謎解きスイッチ（発電機） ---
-        const generator = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1.5, 1),
-            new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x333300 })
-        );
-        generator.position.set(-15, 0.75, -15);
-        scene.add(generator);
-
-        // --- 壁（迷路） ---
+        // --- 迷路の壁 ---
         const wallMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
         const createWall = (w, h, d, x, z) => {
             const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
@@ -89,27 +73,55 @@
             m.castShadow = true;
             m.receiveShadow = true;
             scene.add(m);
+            return m;
         };
-        createWall(20, 3, 1, 0, -10); // 正面の壁
-        createWall(1, 3, 20, -10, -20); // 左の通路
+
+        // 構造
+        createWall(20, 4, 1, 0, -5); 
+        createWall(1, 4, 15, -10, -12.5);
+        
+        // --- 扉 (Door) ---
+        const door = new THREE.Mesh(
+            new THREE.BoxGeometry(4, 4, 0.5),
+            new THREE.MeshStandardMaterial({ color: 0xff8800, emissive: 0x442200 })
+        );
+        door.position.set(5, 2, -5);
+        scene.add(door);
+
+        // --- 鍵 (Key) ---
+        const key = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, 0.5, 0.5),
+            new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x004444 })
+        );
+        key.position.set(-15, 0.5, -20);
+        scene.add(key);
+
+        // --- 発電機 ---
+        const generator = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1.5, 1),
+            new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x333300 })
+        );
+        generator.position.set(15, 0.75, -15);
+        scene.add(generator);
 
         // --- 敵 ---
-        const enemy = new THREE.Group();
-        enemy.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 2, 0.8), new THREE.MeshStandardMaterial({color: 0xff0000})));
-        enemy.position.set(25, 0, -25);
+        const enemy = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({color: 0xff0000}));
+        enemy.position.set(20, 1, -25);
         scene.add(enemy);
 
         // --- ゲーム状態 ---
         let gameState = {
             hasPower: false,
-            inDangerZone: false,
+            hasKey: false,
+            doorOpen: false,
             battery: 100,
             lightOn: true
         };
 
-        const showMsg = (txt) => {
+        const showMsg = (txt, color="#0ff") => {
             const el = document.getElementById('center-msg');
             el.innerText = txt;
+            el.style.color = color;
             el.style.opacity = 1;
             setTimeout(() => el.style.opacity = 0, 3000);
         };
@@ -122,12 +134,12 @@
         });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // --- メインループ ---
         function animate() {
             requestAnimationFrame(animate);
 
             // 1. 移動
             const speed = 0.12;
+            const prevPos = camera.position.clone();
             if(keys['KeyW']) camera.translateZ(-speed);
             if(keys['KeyS']) camera.translateZ(speed);
             if(keys['KeyA']) camera.translateX(-speed);
@@ -136,31 +148,51 @@
             if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
             camera.position.y = 1.6;
 
-            // 2. ギミック判定：発電機
-            const distToGen = camera.position.distanceTo(generator.position);
-            if(!gameState.hasPower && distToGen < 2) {
+            // 簡易衝突判定（扉が閉まっている時）
+            if(!gameState.doorOpen) {
+                const distToDoor = camera.position.distanceTo(door.position);
+                if(distToDoor < 2.5) {
+                    if(gameState.hasKey) {
+                        gameState.doorOpen = true;
+                        scene.remove(door);
+                        showMsg("扉が開いた！", "#0f0");
+                        document.getElementById('task').innerText = "脱出成功！";
+                    } else {
+                        camera.position.copy(prevPos); // 押し戻す
+                    }
+                }
+            }
+
+            // 2. ギミック：発電機
+            if(!gameState.hasPower && camera.position.distanceTo(generator.position) < 2) {
                 gameState.hasPower = true;
                 generator.material.emissive.setHex(0x00ff00);
-                document.getElementById('task').innerText = "脱出ゲートへ向かえ（ danger zone を横切れ）";
-                showMsg("電力が復旧した！");
+                showMsg("電力が供給された！鍵を探せ...");
+                document.getElementById('task').innerText = "青い鍵を探せ";
             }
 
-            // 3. 敵の起動ロジック（エリア判定）
-            const distToZone = camera.position.distanceTo(dangerZone.position);
-            if(distToZone < 7.5) { // 危険エリア内にいる
-                if(!gameState.inDangerZone) {
-                    showMsg("背後に気配を感じる...");
-                    gameState.inDangerZone = true;
+            // 3. ギミック：鍵
+            if(gameState.hasPower && !gameState.hasKey && camera.position.distanceTo(key.position) < 1.5) {
+                gameState.hasKey = true;
+                scene.remove(key);
+                showMsg("鍵を入手した！扉へ向かえ");
+                document.getElementById('inventory').innerText = "ITEM: 錆びた鍵";
+                document.getElementById('task').innerText = "オレンジの扉を開けろ";
+            }
+
+            // 4. 敵のAI（電力がつくと活発になる）
+            if(gameState.hasPower) {
+                enemy.lookAt(camera.position.x, 1, camera.position.z);
+                enemy.translateZ(0.06);
+                if(camera.position.distanceTo(enemy.position) < 1.5) {
+                    showMsg("捕まった...", "#f00");
+                    setTimeout(() => location.reload(), 2000);
                 }
-                enemy.lookAt(camera.position.x, 0, camera.position.z);
-                enemy.translateZ(0.07); // 追いかけてくる
-            } else {
-                gameState.inDangerZone = false;
             }
 
-            // 4. バッテリー
-            flashlight.intensity = gameState.lightOn && gameState.battery > 0 ? 20 : 0;
-            if(gameState.lightOn && gameState.battery > 0) gameState.battery -= 0.02;
+            // 5. バッテリー
+            flashlight.intensity = gameState.lightOn && gameState.battery > 0 ? 25 : 0;
+            if(gameState.lightOn && gameState.battery > 0) gameState.battery -= 0.015;
             document.getElementById('battery-fill').style.width = gameState.battery + "%";
 
             renderer.render(scene, camera);
