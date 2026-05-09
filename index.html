@@ -2,31 +2,28 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Mascot Horror - Kill Animation</title>
+    <title>Mascot Horror - Execution Sequence</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #080808; font-family: 'Courier New', monospace; }
-        #viewport {
-            position: fixed; width: 100%; height: 100%;
-            box-shadow: inset 0 0 180px rgba(0,0,0,0.85); /* ビネット */
-            pointer-events: none; z-index: 5;
-        }
-        #ui {
-            position: absolute; top: 20px; left: 20px; color: #fff;
-            background: rgba(0,0,0,0.5); padding: 12px; border-left: 4px solid #f00; z-index: 10;
-        }
-        #noise { /* 襲われた時のノイズ演出 */
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Courier New', monospace; }
+        #viewport { position: fixed; width: 100%; height: 100%; box-shadow: inset 0 0 150px #000; pointer-events: none; z-index: 5; }
+        
+        /* フェードアウト用の黒い幕 */
+        #fade-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: url('https://media.giphy.com/media/oEI9uWUicGhoY/giphy.gif');
-            opacity: 0; pointer-events: none; z-index: 100; mix-blend-mode: screen;
+            background: #000; opacity: 0; pointer-events: none; z-index: 100;
+            transition: opacity 1.5s ease-in;
         }
+        
+        #ui { position: absolute; top: 20px; left: 20px; color: #fff; z-index: 10; }
+        .hint { color: #555; font-size: 0.8em; }
     </style>
 </head>
 <body>
     <div id="viewport"></div>
-    <div id="noise"></div>
+    <div id="fade-overlay"></div>
     <div id="ui">
-        <div id="mission">MISSION: 正しい順序でコアを回収せよ</div>
-        <div style="font-size: 0.8em; color: #aaa;">HINT: 赤 -> 青 -> 緑</div>
+        <div>STATUS: <span id="status" style="color: #0f0;">SURVIVING</span></div>
+        <div class="hint">ヒント: 赤い立方体に触れるとキルシーン開始</div>
     </div>
 
     <script type="importmap">
@@ -37,86 +34,61 @@
         import * as THREE from 'three';
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050508);
-        scene.fog = new THREE.Fog(0x050508, 1, 50);
+        scene.background = new THREE.Color(0x0a0a0c);
+        scene.fog = new THREE.Fog(0x0a0a0c, 1, 45);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.6, 15);
+        camera.position.set(0, 1.6, 10);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- ライティング（Poppy Playtime風に明るさを底上げ） ---
-        const ambient = new THREE.AmbientLight(0xffffff, 0.4); // 周囲をうっすら見せる
+        // --- ライティング ---
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
         scene.add(ambient);
-
-        const flashlight = new THREE.SpotLight(0xffffff, 200, 45, Math.PI/5, 0.3);
-        flashlight.castShadow = true;
+        const flashlight = new THREE.SpotLight(0xffffff, 200, 40, Math.PI/6, 0.3);
         camera.add(flashlight);
         flashlight.target.position.set(0, 0, -1);
         camera.add(flashlight.target);
         scene.add(camera);
 
-        // --- 敵（襲ってくるマスコット） ---
-        const enemyGroup = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3, 1), new THREE.MeshStandardMaterial({color: 0xaa0000}));
-        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xff0000}));
-        eye.position.set(0.4, 1, 0.5);
-        const eye2 = eye.clone(); eye2.position.x = -0.4;
-        enemyGroup.add(body, eye, eye2);
-        enemyGroup.position.set(0, 0, -10);
-        scene.add(enemyGroup);
-
         // --- マップ ---
-        const walls = [];
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-        const createWall = (w, h, d, x, z) => {
-            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-            m.position.set(x, h/2, z);
-            m.receiveShadow = true;
-            scene.add(m);
-            walls.push(m);
-        };
-        createWall(40, 6, 2, 0, 20); createWall(40, 6, 2, 0, -20);
-        createWall(2, 6, 40, 20, 0); createWall(2, 6, 40, -20, 0);
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color:0x151515}));
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x151515}));
         floor.rotation.x = -Math.PI/2;
         scene.add(floor);
 
-        // --- パズル（コア） ---
-        const cores = [];
-        const colors = [0xff0000, 0x0000ff, 0x00ff00];
-        [{x:-8,z:5}, {x:8,z:-5}, {x:0,z:-12}].forEach((p, i) => {
-            const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5), new THREE.MeshStandardMaterial({color: colors[i], emissive: colors[i]}));
-            c.position.set(p.x, 1, p.z);
-            c.userData = { id: i };
-            scene.add(c);
-            cores.push(c);
-        });
+        // --- 敵 (Mascot) ---
+        const enemy = new THREE.Group();
+        // 顔（不気味な造形）
+        const face = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1), new THREE.MeshStandardMaterial({color: 0x330000}));
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xff0000}));
+        eye.position.set(0.4, 0.5, 0.5);
+        const eye2 = eye.clone(); eye2.position.x = -0.4;
+        enemy.add(face, eye, eye2);
+        enemy.position.set(0, 0, -5); // 前方に配置
+        scene.add(enemy);
+
+        // --- ゲームオーバー用トリガー（赤い箱） ---
+        const trigger = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({color: 0xff0000, emissive: 0xff0000}));
+        trigger.position.set(0, 0.5, 0);
+        scene.add(trigger);
 
         // --- ロジック変数 ---
         const keys = {};
-        let collected = 0;
         let isDead = false;
+        let deathPhase = 0; // 0: 生存, 1: 襲撃開始, 2: フェードアウト
         let deathTimer = 0;
 
         window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        function triggerDeath() {
-            if (isDead) return;
-            isDead = true;
-            document.getElementById('noise').style.opacity = 0.5;
-        }
-
         function animate() {
             requestAnimationFrame(animate);
 
             if (!isDead) {
-                const prevPos = camera.position.clone();
-                const speed = 0.14;
+                // 通常操作
+                const speed = 0.12;
                 if(keys['KeyW']) camera.translateZ(-speed);
                 if(keys['KeyS']) camera.translateZ(speed);
                 if(keys['KeyA']) camera.translateX(-speed);
@@ -125,43 +97,41 @@
                 if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
                 camera.position.y = 1.6;
 
-                // 衝突判定
-                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1, 1, 1));
-                walls.forEach(w => { if(pBox.intersectsBox(new THREE.Box3().setFromObject(w))) camera.position.copy(prevPos); });
-
-                // パズル判定
-                cores.forEach((c, idx) => {
-                    if(c.visible && camera.position.distanceTo(c.position) < 1.5) {
-                        if(idx === collected) {
-                            c.visible = false;
-                            collected++;
-                        } else {
-                            triggerDeath();
-                        }
-                    }
-                });
-
-                // 敵の接近（パズルを間違えなくても、近づきすぎたら死ぬ）
-                if (camera.position.distanceTo(enemyGroup.position) < 3) triggerDeath();
+                // トリガー接触判定
+                if (camera.position.distanceTo(trigger.position) < 1.5) {
+                    isDead = true;
+                    deathPhase = 1;
+                    document.getElementById('status').innerText = "CAUGHT";
+                    document.getElementById('status').style.color = "#f00";
+                }
             } else {
-                // --- キルシーン演出 ---
-                deathTimer += 0.1;
-                
-                // 1. 強制的に敵の顔（カメラの高さ付近）を向かせる
-                const targetPos = new THREE.Vector3(enemyGroup.position.x, 1.6, enemyGroup.position.z);
-                camera.lookAt(targetPos);
+                // --- ジャンプスケア・シーケンス ---
+                deathTimer += 0.016;
 
-                // 2. 敵が目の前に飛び込んでくる
-                if (enemyGroup.position.distanceTo(camera.position) > 1.5) {
-                    enemyGroup.translateZ(0.5);
+                // ① カメラを強制固定（敵を直視）
+                // 敵の「顔」の高さ（1.5）に向けて視線を固定
+                const lookTarget = new THREE.Vector3(enemy.position.x, 1.5, enemy.position.z);
+                camera.lookAt(lookTarget);
+
+                // ② 敵が自分に近づいてくる（突進）
+                if (enemy.position.distanceTo(camera.position) > 0.8) {
+                    const dir = new THREE.Vector3().subVectors(camera.position, enemy.position).normalize();
+                    enemy.position.add(dir.multiplyScalar(0.4)); // 高速接近
                 }
 
-                // 3. カメラを激しく揺らす（シェイク）
-                camera.position.x += (Math.random() - 0.5) * 0.2;
-                camera.position.y += (Math.random() - 0.5) * 0.2;
+                // ③ 画面の揺れとフェードアウト
+                if (deathTimer > 0.5) {
+                    // カメラシェイク
+                    const shakeStrength = 0.15;
+                    camera.position.x += (Math.random() - 0.5) * shakeStrength;
+                    camera.position.y += (Math.random() - 0.5) * shakeStrength;
+                    
+                    // フェードアウト開始
+                    document.getElementById('fade-overlay').style.opacity = 1;
+                }
 
-                // 4. 暗転してリロード
-                if (deathTimer > 15) location.reload();
+                // リロード
+                if (deathTimer > 2.5) location.reload();
             }
 
             renderer.render(scene, camera);
