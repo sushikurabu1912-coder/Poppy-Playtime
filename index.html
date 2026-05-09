@@ -42,11 +42,11 @@ canvas{
     position:absolute;
     top:20px;
     left:20px;
-    width:340px;
-    background:rgba(0,0,0,0.5);
+    width:380px;
+    background:rgba(0,0,0,0.7);
     border:1px solid rgba(255,255,255,0.2);
-    padding:14px;
-    line-height:1.7;
+    padding:16px;
+    line-height:1.8;
     font-size:14px;
 }
 
@@ -55,7 +55,7 @@ canvas{
     left:50%;
     bottom:40px;
     transform:translateX(-50%);
-    background:rgba(0,0,0,0.7);
+    background:rgba(0,0,0,0.75);
     padding:12px 20px;
     opacity:0;
     transition:0.3s;
@@ -81,7 +81,7 @@ canvas{
     position:absolute;
     right:20px;
     bottom:20px;
-    background:rgba(0,0,0,0.5);
+    background:rgba(0,0,0,0.6);
     border:1px solid rgba(255,255,255,0.3);
     padding:10px 14px;
     font-size:14px;
@@ -105,8 +105,14 @@ canvas{
     <div id="crosshair">+</div>
 
     <div id="objective">
-        <b>OBJECTIVE</b><br>
-        屋上中央電源を復旧する<br><br>
+        <b>OBJECTIVE</b><br><br>
+
+        管理室に入るための<br>
+        「中央電源」を復旧する。<br><br>
+
+        ① 倉庫エリアでヒューズを探す<br>
+        ② 中央ブレーカーへ向かう<br>
+        ③ Eキーで電源を復旧する<br><br>
 
         WASD : 移動<br>
         SHIFT : ダッシュ<br>
@@ -134,7 +140,8 @@ canvas{
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x050505, 6, 38);
+
+scene.fog = new THREE.Fog(0x000000, 2, 18);
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -151,14 +158,14 @@ const renderer = new THREE.WebGLRenderer({
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x050505);
+renderer.setClearColor(0x000000);
 
 document.body.appendChild(renderer.domElement);
 
-const ambient = new THREE.AmbientLight(0x404040,0.25);
+const ambient = new THREE.AmbientLight(0x111111,0.08);
 scene.add(ambient);
 
-const moon = new THREE.DirectionalLight(0x99bbff,0.3);
+const moon = new THREE.DirectionalLight(0x88aaff,0.08);
 moon.position.set(10,20,10);
 moon.castShadow = true;
 scene.add(moon);
@@ -168,9 +175,10 @@ const flashlight = new THREE.SpotLight(
     0
 );
 
-flashlight.angle = 0.35;
-flashlight.penumbra = 0.5;
-flashlight.distance = 25;
+flashlight.angle = 0.28;
+flashlight.penumbra = 0.3;
+flashlight.distance = 30;
+flashlight.decay = 1.5;
 flashlight.castShadow = true;
 
 scene.add(flashlight);
@@ -181,7 +189,7 @@ let flashlightOn = false;
 const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(100,100),
     new THREE.MeshStandardMaterial({
-        color:0x2b2b2b,
+        color:0x1a1a1a,
         roughness:1
     })
 );
@@ -190,7 +198,9 @@ floor.rotation.x = -Math.PI/2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-function createWall(x,y,z,w,h,d,color=0x333333){
+const colliders = [];
+
+function createWall(x,y,z,w,h,d,color=0x222222){
 
     const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(w,h,d),
@@ -205,6 +215,10 @@ function createWall(x,y,z,w,h,d,color=0x333333){
 
     scene.add(mesh);
 
+    const box = new THREE.Box3().setFromObject(mesh);
+
+    colliders.push(box);
+
     return mesh;
 }
 
@@ -213,16 +227,16 @@ createWall(-20,2,0,1,4,40);
 createWall(20,2,0,1,4,40);
 createWall(0,2,20,40,4,1);
 
-createWall(-11,2,-4,8,4,8,0x2a2a2a);
-createWall(11,2,-5,8,4,8,0x2a2a2a);
-createWall(0,2,8,12,4,6,0x2a2a2a);
+createWall(-11,2,-4,8,4,8,0x181818);
+createWall(11,2,-5,8,4,8,0x181818);
+createWall(0,2,8,12,4,6,0x181818);
 
 function createLamp(x,z){
 
     const pole = new THREE.Mesh(
         new THREE.CylinderGeometry(0.1,0.1,5),
         new THREE.MeshStandardMaterial({
-            color:0x555555
+            color:0x333333
         })
     );
 
@@ -230,24 +244,14 @@ function createLamp(x,z){
     scene.add(pole);
 
     const light = new THREE.PointLight(
-        0xffddaa,
-        1.5,
-        12
+        0xffaa66,
+        0.3,
+        5
     );
 
     light.position.set(x,4.5,z);
+
     scene.add(light);
-
-    const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.2),
-        new THREE.MeshBasicMaterial({
-            color:0xffcc88
-        })
-    );
-
-    bulb.position.copy(light.position);
-
-    scene.add(bulb);
 }
 
 createLamp(-8,-8);
@@ -259,8 +263,8 @@ const carousel = new THREE.Group();
 const base = new THREE.Mesh(
     new THREE.CylinderGeometry(5,5,1,32),
     new THREE.MeshStandardMaterial({
-        color:0x772222,
-        emissive:0x220000
+        color:0x551111,
+        emissive:0x110000
     })
 );
 
@@ -269,7 +273,7 @@ carousel.add(base);
 const pole = new THREE.Mesh(
     new THREE.CylinderGeometry(0.3,0.3,6),
     new THREE.MeshStandardMaterial({
-        color:0xaaaaaa
+        color:0x888888
     })
 );
 
@@ -281,8 +285,7 @@ for(let i=0;i<6;i++){
     const horse = new THREE.Mesh(
         new THREE.BoxGeometry(1,1,2),
         new THREE.MeshStandardMaterial({
-            color:0xffffff * Math.random(),
-            emissive:0x111111
+            color:0x666666
         })
     );
 
@@ -338,7 +341,7 @@ panda.add(head);
 panda.add(eye1);
 panda.add(eye2);
 
-panda.position.set(12,0,-12);
+panda.visible = false;
 
 scene.add(panda);
 
@@ -346,7 +349,7 @@ const fuse = new THREE.Mesh(
     new THREE.BoxGeometry(0.5,0.5,0.5),
     new THREE.MeshStandardMaterial({
         color:0xffff00,
-        emissive:0x888800
+        emissive:0x666600
     })
 );
 
@@ -358,7 +361,7 @@ const breaker = new THREE.Mesh(
     new THREE.BoxGeometry(1,2,1),
     new THREE.MeshStandardMaterial({
         color:0x00ffcc,
-        emissive:0x004444
+        emissive:0x003333
     })
 );
 
@@ -376,7 +379,7 @@ document.addEventListener("keydown",(e)=>{
 
         flashlightOn = !flashlightOn;
 
-        flashlight.intensity = flashlightOn ? 5 : 0;
+        flashlight.intensity = flashlightOn ? 8 : 0;
 
         document.getElementById("flashlight").innerHTML =
             "FLASHLIGHT : " + (flashlightOn ? "ON" : "OFF");
@@ -389,11 +392,6 @@ document.addEventListener("keyup",(e)=>{
 
 let yaw = 0;
 let pitch = 0;
-
-const player = {
-    speed:4,
-    sprint:8
-};
 
 let stamina = 100;
 
@@ -434,16 +432,22 @@ function interact(){
 
         powerOn = true;
 
-        moon.intensity = 0.8;
+        moon.intensity = 0.25;
 
         showMessage("中央電源を復旧した");
 
         setTimeout(()=>{
-            showMessage("まもなく閉店時間です");
+            showMessage("・・・何か動いた");
         },3000);
 
         setTimeout(()=>{
-            panda.position.set(0,0,0);
+            panda.position.set(0,0,-6);
+            panda.visible = true;
+
+            setTimeout(()=>{
+                panda.visible = false;
+            },250);
+
         },5000);
     }
 }
@@ -455,6 +459,31 @@ document.addEventListener("keydown",(e)=>{
     }
 });
 
+function checkCollision(position){
+
+    const playerBox = new THREE.Box3(
+        new THREE.Vector3(
+            position.x - 0.4,
+            position.y - 1,
+            position.z - 0.4
+        ),
+        new THREE.Vector3(
+            position.x + 0.4,
+            position.y + 1,
+            position.z + 0.4
+        )
+    );
+
+    for(const box of colliders){
+
+        if(playerBox.intersectsBox(box)){
+            return true;
+        }
+    }
+
+    return false;
+}
+
 const clock = new THREE.Clock();
 
 let pandaTimer = 0;
@@ -465,11 +494,11 @@ function animate(){
 
     const delta = clock.getDelta();
 
-    let moveSpeed = player.speed;
+    let moveSpeed = 4;
 
     if(keys["ShiftLeft"] && stamina > 0){
 
-        moveSpeed = player.sprint;
+        moveSpeed = 8;
 
         stamina -= 28 * delta;
 
@@ -517,6 +546,8 @@ function animate(){
         -forward.x
     );
 
+    const oldPosition = camera.position.clone();
+
     if(keys["KeyW"]){
 
         camera.position.addScaledVector(
@@ -549,53 +580,44 @@ function animate(){
         );
     }
 
+    if(checkCollision(camera.position)){
+        camera.position.copy(oldPosition);
+    }
+
     flashlight.position.copy(camera.position);
 
-    const targetDirection = new THREE.Vector3();
-    camera.getWorldDirection(targetDirection);
+    const direction = new THREE.Vector3();
+    camera.getWorldDirection(direction);
 
     flashlight.target.position.copy(
         camera.position.clone().add(
-            targetDirection.multiplyScalar(10)
+            direction.multiplyScalar(10)
         )
     );
 
-    carousel.rotation.y += 0.25 * delta;
-
-    panda.lookAt(camera.position);
+    carousel.rotation.y += 0.2 * delta;
 
     pandaTimer += delta;
 
     if(!powerOn){
 
-        if(pandaTimer > 5){
+        if(pandaTimer > 18){
 
             pandaTimer = 0;
 
-            panda.position.x = (Math.random()*30)-15;
-            panda.position.z = (Math.random()*30)-15;
-        }
-
-    }else{
-
-        panda.position.lerp(
-            new THREE.Vector3(
-                camera.position.x,
+            panda.position.set(
+                (Math.random()*20)-10,
                 0,
-                camera.position.z
-            ),
-            0.002
-        );
+                (Math.random()*20)-10
+            );
 
-        if(distance(camera,panda) < 2){
+            panda.lookAt(camera.position);
 
-            document.getElementById("fade").style.opacity = 1;
-
-            showMessage("つかまった");
+            panda.visible = true;
 
             setTimeout(()=>{
-                location.reload();
-            },3000);
+                panda.visible = false;
+            },180);
         }
     }
 
