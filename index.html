@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Poppy Playtime - Look Around Edition</title>
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        #game-view { 
+            position: relative; width: 800px; height: 600px; margin: 20px auto; 
+            border: 5px solid #222; overflow: hidden; background: #050505;
+        }
+        
+        /* 視点移動するステージ全体 */
+        #stage {
+            position: absolute; width: 1600px; height: 600px; left: -400px; /* 初期位置中央 */
+            transition: transform 0.1s ease-out;
+        }
+
+        /* 背景の装飾 */
+        .wall { position: absolute; width: 100%; height: 100%; background-image: repeating-linear-gradient(90deg, #111 0px, #111 50px, #1a1a1a 50px, #1a1a1a 100px); opacity: 0.3; }
+
+        /* キャラクターとオブジェクト */
+        #huggy { position: absolute; width: 150px; bottom: 100px; left: 725px; transition: transform 0.1s; font-size: 100px; text-align: center; }
+        .target { position: absolute; width: 100px; height: 100px; background: #333; border: 5px solid #555; top: 250px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        #target-l { left: 400px; border-color: #0055ff; }
+        #target-r { left: 1100px; border-color: #ff0000; }
+        .active { background: #0f0 !important; box-shadow: 0 0 30px #0f0; }
+
+        /* グラブパック（視点に固定） */
+        .hand { position: absolute; width: 80px; bottom: -20px; transition: 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28); z-index: 100; }
+        #hand-left { left: 200px; transform: translateY(150px); }
+        #hand-right { right: 200px; transform: translateY(150px); }
+
+        #ui { position: absolute; top: 10px; width: 100%; text-align: center; z-index: 200; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <h1>PLANT FACILITY - SECTOR B</h1>
+    <p>【矢印キー左右】視点移動 | 【左右クリック】GrabPack発射</p>
+    <h2 id="status">MONITORING...</h2>
+</div>
+
+<div id="game-view">
+    <div id="stage">
+        <div class="wall"></div>
+        <div id="target-l" class="target">CHARGE BLUE</div>
+        <div id="target-r" class="target">CHARGE RED</div>
+        <div id="huggy">💙<br>👹</div>
+    </div>
+    
+    <!-- 手は画面に固定 -->
+    <img id="hand-left" class="hand" src="https://img.icons8.com/color/96/blue-hand.png">
+    <img id="hand-right" class="hand" src="https://img.icons8.com/color/96/red-hand.png">
+</div>
+
+<script>
+    const stage = document.getElementById('stage');
+    const huggy = document.getElementById('huggy');
+    const statusText = document.getElementById('status');
+    const handL = document.getElementById('hand-left');
+    const handR = document.getElementById('hand-right');
+
+    let cameraX = -400;
+    let huggyScale = 1;
+    let gameOver = false;
+    let lActive = false;
+    let rActive = false;
+
+    // 視点移動の処理
+    window.addEventListener('keydown', (e) => {
+        if (gameOver) return;
+        if (e.key === "ArrowLeft") {
+            cameraX += 20;
+        } else if (e.key === "ArrowRight") {
+            cameraX -= 20;
+        }
+        // 移動制限
+        cameraX = Math.min(Math.max(cameraX, -800), 0);
+        stage.style.left = cameraX + "px";
+    });
+
+    // ハギーの接近
+    const gameLoop = setInterval(() => {
+        if (gameOver) return;
+        huggyScale += 0.003;
+        huggy.style.transform = `scale(${huggyScale})`;
+        if (huggyScale > 4) endGame();
+    }, 30);
+
+    // GrabPack発射（クリックした方向に飛ばすのではなく、正面のターゲットに当てる簡易仕様）
+    window.addEventListener('mousedown', (e) => {
+        if (gameOver) return;
+        if (e.button === 0) {
+            shoot('L');
+        } else if (e.button === 2) {
+            shoot('R');
+        }
+    });
+
+    function shoot(side) {
+        const hand = (side === 'L') ? handL : handR;
+        hand.style.transform = "translateY(-350px)";
+        
+        setTimeout(() => {
+            // 視点がターゲットに合っているか判定
+            if (side === 'L' && cameraX > -150 && cameraX < 50) {
+                lActive = true;
+                document.getElementById('target-l').classList.add('active');
+            }
+            if (side === 'R' && cameraX > -750 && cameraX < -550) {
+                rActive = true;
+                document.getElementById('target-r').classList.add('active');
+            }
+            checkWin();
+            
+            setTimeout(() => {
+                hand.style.transform = "translateY(150px)";
+                resetSwitches();
+            }, 400);
+        }, 200);
+    }
+
+    function resetSwitches() {
+        lActive = false; rActive = false;
+        document.querySelectorAll('.target').forEach(t => t.classList.remove('active'));
+    }
+
+    function checkWin() {
+        if (lActive || rActive) { // どちらか当たれば少し下がる、両方なら大幅に下がる
+            huggyScale = Math.max(1, huggyScale - 0.5);
+            statusText.innerText = "KEEP BACK!!";
+            statusText.style.color = "#0ff";
+        }
+    }
+
+    function endGame() {
+        gameOver = true;
+        clearInterval(gameLoop);
+        statusText.innerText = "EVERYONE FORGETS THE RULES...";
+        statusText.style.color = "red";
+        huggy.innerHTML = "💀";
+        document.body.style.backgroundColor = "#200";
+    }
+
+    window.oncontextmenu = (e) => e.preventDefault();
+</script>
+</body>
+</html>
