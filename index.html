@@ -2,37 +2,17 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>3D Horror - Objective Based Exploration</title>
+    <title>3D Horror - Fix View</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; }
-        #ui {
-            position: absolute; top: 20px; left: 20px; color: #fff;
-            background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; border-left: 5px solid #ff0;
-            pointer-events: none; width: 250px;
-        }
-        #center-msg {
-            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
-            color: #fff; font-size: 1.8em; text-align: center; text-shadow: 0 0 10px #f00;
-            pointer-events: none; opacity: 0; transition: opacity 0.5s;
-        }
-        .status { margin-bottom: 8px; font-size: 0.9em; }
-        .label { color: #aaa; font-size: 0.8em; }
-        #battery-bar { width: 100%; height: 6px; background: #333; margin-top: 5px; }
-        #battery-fill { height: 100%; background: #0f0; width: 100%; }
-        #fuse-count { font-size: 1.5em; color: #0ff; }
+        body { margin: 0; overflow: hidden; background-color: #222; font-family: sans-serif; }
+        #ui { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 10px; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div class="label">MISSION</div>
-        <div id="task" style="font-weight: bold; color: #fff;">ヒューズを3つ集めろ</div>
-        <div style="margin-top:10px;">
-            <span class="label">FUSES:</span> <span id="fuse-count">0</span> / 3
-        </div>
-        <div style="margin-top:10px;" class="label">FLASHLIGHT ENERGY</div>
-        <div id="battery-bar"><div id="battery-fill"></div></div>
+        <b>MISSION:</b> <span id="task">ヒューズを3つ集めろ</span><br>
+        FUSES: <span id="fuse-count">0</span> / 3
     </div>
-    <div id="center-msg"></div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -41,175 +21,57 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 基本構成 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.Fog(0x050505, 5, 40);
+        // 背景を少し明るいグレーにして、何も映らないのを防ぐ
+        scene.background = new THREE.Color(0x222222); 
+        scene.fog = new THREE.Fog(0x222222, 1, 50);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // 【重要】開始位置を少し後ろに下げ、壁の中に埋まらないようにする
+        camera.position.set(0, 1.6, 5); 
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        const ambient = new THREE.AmbientLight(0x333333);
+        // 【重要】環境光を強くする（懐中電灯がなくてもうっすら見えるように）
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4); 
         scene.add(ambient);
 
-        const flashlight = new THREE.SpotLight(0xffffff, 120, 35, Math.PI / 4, 0.4);
-        flashlight.castShadow = true;
+        const flashlight = new THREE.SpotLight(0xffffff, 100, 40, Math.PI/4, 0.5);
         camera.add(flashlight);
         flashlight.target.position.set(0, 0, -1);
         camera.add(flashlight.target);
         scene.add(camera);
 
-        // --- 地面 ---
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        // 地面
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(100, 100), 
+            new THREE.MeshStandardMaterial({ color: 0x444444 })
+        );
         floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
         scene.add(floor);
-        scene.add(new THREE.GridHelper(200, 100, 0x222222, 0x111111));
+        scene.add(new THREE.GridHelper(100, 50, 0x888888, 0x444444));
 
-        // --- 壁と衝突判定 ---
-        const walls = [];
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
-        const createWall = (w, h, d, x, z) => {
-            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-            m.position.set(x, h/2, z);
-            m.castShadow = true;
-            m.receiveShadow = true;
-            scene.add(m);
-            walls.push(m);
-        };
+        // 障害物（テスト用）
+        const box = new THREE.Mesh(new THREE.BoxGeometry(2,2,2), new THREE.MeshStandardMaterial({color: 0xff0000}));
+        box.position.set(0, 1, -5);
+        scene.add(box);
 
-        // 外壁
-        createWall(100, 5, 1, 0, 50);  createWall(100, 5, 1, 0, -50);
-        createWall(1, 5, 100, 50, 0);  createWall(1, 5, 100, -50, 0);
-
-        // 内部の迷路セクション
-        createWall(30, 4, 1, -20, 10);
-        createWall(1, 4, 30, 10, -10);
-        createWall(20, 4, 1, 30, 20);
-
-        // --- 目的アイテム: ヒューズ (Fuses) ---
-        const fusePositions = [
-            {x: -45, z: -45}, {x: 45, z: 45}, {x: -45, z: 45}
-        ];
-        const fuses = [];
-        fusePositions.forEach(pos => {
-            const f = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.2, 0.2, 0.8),
-                new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 2 })
-            );
-            f.position.set(pos.x, 0.5, pos.z);
-            scene.add(f);
-            fuses.push(f);
-        });
-
-        // --- 中央の発電機 (Generator) ---
-        const generator = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({ color: 0x555500 }));
-        generator.position.set(0, 1, 0);
-        scene.add(generator);
-        walls.push(generator);
-
-        // --- 脱出門 (Exit Door) ---
-        const exitDoor = new THREE.Mesh(new THREE.BoxGeometry(6, 5, 0.5), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
-        exitDoor.position.set(0, 2.5, -49.5);
-        scene.add(exitDoor);
-        walls.push(exitDoor);
-
-        // --- 敵 (Stalker) ---
-        const enemy = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.5, 1.2), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
-        enemy.position.set(40, 0, -40);
-        scene.add(enemy);
-
-        // --- ゲーム管理 ---
-        let state = {
-            fusesCollected: 0,
-            generatorActive: false,
-            escaped: false,
-            battery: 100,
-            lightOn: true
-        };
-
-        const showMsg = (txt, color="#fff") => {
-            const el = document.getElementById('center-msg');
-            el.innerText = txt; el.style.color = color; el.style.opacity = 1;
-            setTimeout(() => el.style.opacity = 0, 3000);
-        };
-
+        // 操作
         const keys = {};
-        window.addEventListener('keydown', (e) => {
-            keys[e.code] = true;
-            if(e.code === 'Space') state.lightOn = !state.lightOn;
-        });
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // --- メインループ ---
         function animate() {
-            if (state.escaped) return;
             requestAnimationFrame(animate);
-
-            const prevPos = camera.position.clone();
-            const speed = 0.15;
-            if(keys['KeyW']) camera.translateZ(-speed);
-            if(keys['KeyS']) camera.translateZ(speed);
-            if(keys['KeyA']) camera.translateX(-speed);
-            if(keys['KeyD']) camera.translateX(speed);
-            if(keys['ArrowLeft'] || keys['KeyJ']) camera.rotation.y += 0.04;
-            if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
-            camera.position.y = 1.6;
-
-            // 当たり判定
-            const playerBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.8, 2, 0.8));
-            for (let wall of walls) {
-                if (playerBox.intersectsBox(new THREE.Box3().setFromObject(wall))) {
-                    camera.position.copy(prevPos);
-                    break;
-                }
-            }
-
-            // アイテム回収判定
-            fuses.forEach((f, i) => {
-                if (f.visible && camera.position.distanceTo(f.position) < 1.5) {
-                    f.visible = false;
-                    state.fusesCollected++;
-                    document.getElementById('fuse-count').innerText = state.fusesCollected;
-                    showMsg("ヒューズを回収した", "#0ff");
-                    if (state.fusesCollected === 3) showMsg("中央の発電機へ向かえ！", "#ff0");
-                }
-            });
-
-            // 発電機起動判定
-            if (!state.generatorActive && state.fusesCollected === 3 && camera.position.distanceTo(generator.position) < 3) {
-                state.generatorActive = true;
-                generator.material.color.setHex(0x00ff00);
-                exitDoor.material.color.setHex(0x00ff00);
-                showMsg("電源復旧！北の門から脱出しろ！", "#0f0");
-                document.getElementById('task').innerText = "北の門へ急げ！";
-            }
-
-            // 脱出判定
-            if (state.generatorActive && camera.position.distanceTo(exitDoor.position) < 3) {
-                state.escaped = true;
-                showMsg("脱出成功！", "#0f0");
-                setTimeout(() => location.reload(), 5000);
-            }
-
-            // 敵の挙動 (ヒューズを集めるほど速くなる)
-            const distToEnemy = camera.position.distanceTo(enemy.position);
-            if (distToEnemy < 30) {
-                enemy.lookAt(camera.position.x, 0, camera.position.z);
-                enemy.translateZ(0.04 + (state.fusesCollected * 0.02));
-                if (distToEnemy < 1.5) {
-                    showMsg("GAME OVER", "#f00");
-                    setTimeout(() => location.reload(), 2000);
-                }
-            }
-
-            // ライト消費
-            flashlight.intensity = (state.lightOn && state.battery > 0) ? 120 : 0;
-            if(state.lightOn && state.battery > 0) state.battery -= 0.01;
-            document.getElementById('battery-fill').style.width = state.battery + "%";
+            
+            if(keys['KeyW']) camera.translateZ(-0.1);
+            if(keys['KeyS']) camera.translateZ(0.1);
+            if(keys['KeyA']) camera.translateX(-0.1);
+            if(keys['KeyD']) camera.translateX(0.1);
+            if(keys['ArrowLeft'] || keys['KeyJ']) camera.rotation.y += 0.03;
+            if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.03;
 
             renderer.render(scene, camera);
         }
