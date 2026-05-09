@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ROOFTOP HORROR</title>
 
 <style>
+
 *{
     margin:0;
     padding:0;
@@ -91,12 +92,81 @@ canvas{
     position:absolute;
     right:20px;
     top:20px;
-    width:270px;
+    width:280px;
     background:rgba(0,0,0,0.75);
     border:1px solid rgba(255,255,255,0.2);
     padding:14px;
     line-height:1.8;
     font-size:14px;
+}
+
+#cameraOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.92);
+    display:none;
+    z-index:50;
+    pointer-events:auto;
+}
+
+#cameraFeed{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:70%;
+    height:70%;
+    border:4px solid white;
+    background:black;
+    overflow:hidden;
+}
+
+#cameraNoise{
+    position:absolute;
+    inset:0;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(255,255,255,0.02),
+            rgba(255,255,255,0.02) 2px,
+            transparent 2px,
+            transparent 4px
+        );
+    animation:noise 0.1s infinite;
+}
+
+@keyframes noise{
+    from{
+        transform:translateY(0);
+    }
+    to{
+        transform:translateY(4px);
+    }
+}
+
+#cameraText{
+    position:absolute;
+    left:20px;
+    top:20px;
+    color:white;
+    font-size:24px;
+}
+
+#cameraHint{
+    position:absolute;
+    left:20px;
+    bottom:20px;
+    line-height:1.8;
+}
+
+#cameraView{
+    position:absolute;
+    inset:0;
+}
+
+.camObject{
+    position:absolute;
+    background:white;
 }
 
 #fade{
@@ -107,6 +177,7 @@ canvas{
     pointer-events:none;
     transition:1s;
 }
+
 </style>
 </head>
 
@@ -114,41 +185,66 @@ canvas{
 
 <div id="ui">
 
-    <div id="crosshair">+</div>
+<div id="crosshair">+</div>
 
-    <div id="objective">
-        <b>OBJECTIVE</b><br><br>
+<div id="objective">
 
-        電源配分を切り替えながら<br>
-        中央ブレーカーを復旧する。<br><br>
+<b>OBJECTIVE</b><br><br>
 
-        さらに暗闇で動く存在に注意。<br><br>
+監視室を復旧して<br>
+カメラから扉を開く。<br><br>
 
-        ・倉庫へ送電<br>
-        ・監視室へ送電<br>
-        ・中央ブレーカー起動<br>
-        ・管理室へ入る<br><br>
+暗闇で動く存在に注意。<br><br>
 
-        WASD : 移動<br>
-        SHIFT : ダッシュ<br>
-        E : 調べる<br>
-        F : ライト ON/OFF<br>
-        矢印キー : 視点移動
-    </div>
+・監視室へ送電<br>
+・監視カメラ起動<br>
+・遠隔で扉を開く<br>
+・管理室へ向かう<br><br>
 
-    <div id="powerInfo"></div>
+WASD : 移動<br>
+SHIFT : ダッシュ<br>
+E : 調べる<br>
+F : ライト ON/OFF<br>
+C : カメラ切替<br>
+矢印キー : 視点移動
 
-    <div id="message"></div>
+</div>
 
-    <div id="stamina">
-        <div id="staminaFill"></div>
-    </div>
+<div id="powerInfo"></div>
 
-    <div id="flashlight">
-        FLASHLIGHT : OFF
-    </div>
+<div id="message"></div>
 
-    <div id="fade"></div>
+<div id="stamina">
+<div id="staminaFill"></div>
+</div>
+
+<div id="flashlight">
+FLASHLIGHT : OFF
+</div>
+
+<div id="fade"></div>
+
+</div>
+
+<div id="cameraOverlay">
+
+<div id="cameraFeed">
+
+<div id="cameraNoise"></div>
+
+<div id="cameraText">
+CAM 1
+</div>
+
+<div id="cameraView"></div>
+
+<div id="cameraHint">
+Q / E : カメラ切替<br>
+SPACE : 扉を開く<br>
+ESC : 閉じる
+</div>
+
+</div>
 
 </div>
 
@@ -158,7 +254,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const scene = new THREE.Scene();
 
-scene.fog = new THREE.Fog(0x000000,8,45);
+scene.fog = new THREE.Fog(
+    0x000000,
+    8,
+    45
+);
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -179,28 +279,33 @@ renderer.setSize(
 );
 
 renderer.shadowMap.enabled = true;
+
 renderer.setClearColor(0x000000);
 
-document.body.appendChild(renderer.domElement);
+document.body.appendChild(
+    renderer.domElement
+);
 
-const ambient = new THREE.AmbientLight(
+const ambient =
+new THREE.AmbientLight(
     0x404040,
     0.5
 );
 
 scene.add(ambient);
 
-const moon = new THREE.DirectionalLight(
+const moon =
+new THREE.DirectionalLight(
     0xaaccff,
     0.45
 );
 
 moon.position.set(10,20,10);
-moon.castShadow = true;
 
 scene.add(moon);
 
-const flashlight = new THREE.SpotLight(
+const flashlight =
+new THREE.SpotLight(
     0xffffff,
     0
 );
@@ -208,18 +313,17 @@ const flashlight = new THREE.SpotLight(
 flashlight.angle = 0.75;
 flashlight.penumbra = 0.7;
 flashlight.distance = 55;
-flashlight.decay = 1;
 
 scene.add(flashlight);
 scene.add(flashlight.target);
 
 let flashlightOn = false;
 
-const floor = new THREE.Mesh(
+const floor =
+new THREE.Mesh(
     new THREE.PlaneGeometry(100,100),
     new THREE.MeshStandardMaterial({
-        color:0x2c2c2c,
-        roughness:1
+        color:0x2c2c2c
     })
 );
 
@@ -233,7 +337,8 @@ function createWall(
     x,y,z,w,h,d,color=0x222222
 ){
 
-    const mesh = new THREE.Mesh(
+    const mesh =
+    new THREE.Mesh(
         new THREE.BoxGeometry(w,h,d),
         new THREE.MeshStandardMaterial({
             color
@@ -241,9 +346,6 @@ function createWall(
     );
 
     mesh.position.set(x,y,z);
-
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
 
     scene.add(mesh);
 
@@ -259,29 +361,13 @@ createWall(-20,2,0,1,4,40);
 createWall(20,2,0,1,4,40);
 createWall(0,2,20,40,4,1);
 
-createWall(-12,2,-5,10,4,1,0x111111);
-createWall(-12,2,-10,10,4,1,0x111111);
-
-createWall(12,2,-5,10,4,1,0x111111);
-createWall(12,2,-10,10,4,1,0x111111);
-
 createWall(0,2.5,12,12,5,1,0x181818);
 createWall(-6,2.5,8,1,5,8,0x181818);
 createWall(6,2.5,8,1,5,8,0x181818);
 createWall(0,5,8,12,1,8,0x181818);
 
-const exitSign = new THREE.Mesh(
-    new THREE.BoxGeometry(3,0.8,0.2),
-    new THREE.MeshBasicMaterial({
-        color:0x00ff66
-    })
-);
-
-exitSign.position.set(0,4.5,4);
-
-scene.add(exitSign);
-
-const door = new THREE.Mesh(
+const door =
+new THREE.Mesh(
     new THREE.BoxGeometry(3,4,0.3),
     new THREE.MeshStandardMaterial({
         color:0x555555
@@ -292,148 +378,121 @@ door.position.set(0,2,4);
 
 scene.add(door);
 
-const storageLight = new THREE.PointLight(
-    0xffaa66,
-    0,
-    12
+const cameraSwitch =
+new THREE.Mesh(
+    new THREE.BoxGeometry(1,1,1),
+    new THREE.MeshStandardMaterial({
+        color:0x4444ff,
+        emissive:0x111111
+    })
 );
 
-storageLight.position.set(-12,4,-7);
-
-scene.add(storageLight);
-
-const cameraLight = new THREE.PointLight(
-    0x66aaff,
-    0,
-    12
-);
-
-cameraLight.position.set(12,4,-7);
-
-scene.add(cameraLight);
-
-const hallwayLight = new THREE.PointLight(
-    0xffffff,
-    0.2,
-    20
-);
-
-hallwayLight.position.set(0,5,0);
-
-scene.add(hallwayLight);
-
-function createSwitch(x,z,color){
-
-    const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(1,1,1),
-        new THREE.MeshStandardMaterial({
-            color,
-            emissive:0x111111
-        })
-    );
-
-    mesh.position.set(x,1,z);
-
-    scene.add(mesh);
-
-    return mesh;
-}
-
-const storageSwitch = createSwitch(
-    -15,
-    -12,
-    0xff4444
-);
-
-const cameraSwitch = createSwitch(
-    15,
-    -12,
-    0x4444ff
-);
-
-const breakerSwitch = createSwitch(
-    0,
+cameraSwitch.position.set(
     14,
-    0x00ffcc
+    1,
+    -12
 );
+
+scene.add(cameraSwitch);
 
 const enemy = new THREE.Group();
 
-const enemyBody = new THREE.Mesh(
+const body =
+new THREE.Mesh(
     new THREE.SphereGeometry(1.2,32,32),
     new THREE.MeshStandardMaterial({
         color:0xffffff
     })
 );
 
-enemyBody.position.y = 1.2;
+body.position.y = 1.2;
 
-const enemyHead = new THREE.Mesh(
+const head =
+new THREE.Mesh(
     new THREE.SphereGeometry(0.9,32,32),
     new THREE.MeshStandardMaterial({
         color:0xffffff
     })
 );
 
-enemyHead.position.y = 3;
+head.position.y = 3;
 
-const enemyEye1 = new THREE.Mesh(
+const eye1 =
+new THREE.Mesh(
     new THREE.SphereGeometry(0.12),
     new THREE.MeshBasicMaterial({
         color:0xff0000
     })
 );
 
-enemyEye1.position.set(-0.2,3,0.8);
+eye1.position.set(
+    -0.2,
+    3,
+    0.8
+);
 
-const enemyEye2 = enemyEye1.clone();
-enemyEye2.position.x = 0.2;
+const eye2 = eye1.clone();
 
-enemy.add(enemyBody);
-enemy.add(enemyHead);
-enemy.add(enemyEye1);
-enemy.add(enemyEye2);
+eye2.position.x = 0.2;
 
-enemy.position.set(0,0,-15);
+enemy.add(body);
+enemy.add(head);
+enemy.add(eye1);
+enemy.add(eye2);
+
+enemy.position.set(
+    0,
+    0,
+    -15
+);
 
 scene.add(enemy);
 
 const keys = {};
 
-document.addEventListener("keydown",(e)=>{
+document.addEventListener(
+    "keydown",
+    (e)=>{
 
-    keys[e.code] = true;
+        keys[e.code] = true;
 
-    if(e.code === "KeyF"){
+        if(e.code === "KeyF"){
 
-        flashlightOn = !flashlightOn;
+            flashlightOn =
+            !flashlightOn;
 
-        flashlight.intensity =
+            flashlight.intensity =
             flashlightOn ? 8 : 0;
 
-        document.getElementById(
-            "flashlight"
-        ).innerHTML =
+            document.getElementById(
+                "flashlight"
+            ).innerHTML =
             "FLASHLIGHT : " +
             (flashlightOn ? "ON" : "OFF");
+        }
     }
-});
+);
 
-document.addEventListener("keyup",(e)=>{
-    keys[e.code] = false;
-});
+document.addEventListener(
+    "keyup",
+    (e)=>{
+        keys[e.code] = false;
+    }
+);
 
 let yaw = 0;
 let pitch = 0;
-
 let stamina = 100;
 
 const message =
-    document.getElementById("message");
+document.getElementById(
+    "message"
+);
 
 function showMessage(text){
 
     message.innerHTML = text;
+
     message.style.opacity = 1;
 
     setTimeout(()=>{
@@ -442,15 +501,10 @@ function showMessage(text){
 }
 
 showMessage(
-    "暗闇の中で何かが動いている"
+    "監視システムが停止している"
 );
 
-let activePower = "none";
-
-let storagePowered = false;
-let cameraPowered = false;
-let breakerPowered = false;
-
+let cameraPower = false;
 let gameCompleted = false;
 
 function updatePowerUI(){
@@ -458,19 +512,15 @@ function updatePowerUI(){
     document.getElementById(
         "powerInfo"
     ).innerHTML = `
-    <b>POWER DISTRIBUTION</b><br><br>
-
-    現在供給中 :
-    ${activePower.toUpperCase()}<br><br>
-
-    倉庫 :
-    ${storagePowered ? "ONLINE" : "OFFLINE"}<br>
+    <b>CAMERA SYSTEM</b><br><br>
 
     監視室 :
-    ${cameraPowered ? "ONLINE" : "OFFLINE"}<br>
+    ${cameraPower ? "ONLINE" : "OFFLINE"}<br><br>
 
-    中央ブレーカー :
-    ${breakerPowered ? "ONLINE" : "LOCKED"}
+    扉 :
+    ${gameCompleted ? "OPEN" : "LOCKED"}<br><br>
+
+    暗闇では敵が移動する
     `;
 }
 
@@ -483,97 +533,22 @@ function distance(a,b){
     );
 }
 
-function switchPower(target){
-
-    activePower = target;
-
-    storagePowered = false;
-    cameraPowered = false;
-
-    storageLight.intensity = 0;
-    cameraLight.intensity = 0;
-
-    if(target === "storage"){
-
-        storagePowered = true;
-
-        storageLight.intensity = 2;
-
-        showMessage(
-            "倉庫エリアへ送電した"
-        );
-    }
-
-    if(target === "camera"){
-
-        cameraPowered = true;
-
-        cameraLight.intensity = 2;
-
-        showMessage(
-            "監視室へ送電した"
-        );
-    }
-
-    updatePowerUI();
-}
-
 function interact(){
-
-    if(
-        distance(camera,storageSwitch) < 2
-    ){
-
-        switchPower("storage");
-    }
 
     if(
         distance(camera,cameraSwitch) < 2
     ){
 
-        switchPower("camera");
-    }
+        cameraPower = true;
 
-    if(
-        distance(camera,breakerSwitch) < 2 &&
-        storagePowered &&
-        cameraPowered
-    ){
-
-        breakerPowered = true;
-
-        moon.intensity = 0.7;
-
-        breakerSwitch.material.emissive
-            .setHex(0x00ffff);
+        cameraSwitch.material.emissive
+        .setHex(0x0000ff);
 
         showMessage(
-            "中央ブレーカーを起動した"
+            "監視システムが起動した"
         );
-
-        setTimeout(()=>{
-
-            showMessage(
-                "管理室の扉が開いた"
-            );
-
-            door.position.y = -5;
-
-            gameCompleted = true;
-
-        },3000);
 
         updatePowerUI();
-    }
-
-    if(
-        distance(camera,breakerSwitch) < 2 &&
-        (!storagePowered || !cameraPowered)
-    ){
-
-        showMessage(
-            "両方の送電履歴が必要"
-        );
     }
 
     if(
@@ -603,7 +578,8 @@ document.addEventListener(
 
 function checkCollision(position){
 
-    const playerBox = new THREE.Box3(
+    const playerBox =
+    new THREE.Box3(
         new THREE.Vector3(
             position.x - 0.4,
             position.y - 1,
@@ -628,45 +604,186 @@ function checkCollision(position){
     return false;
 }
 
+let cameraOpened = false;
+let currentCam = 1;
+
+const overlay =
+document.getElementById(
+    "cameraOverlay"
+);
+
+const cameraText =
+document.getElementById(
+    "cameraText"
+);
+
+const cameraView =
+document.getElementById(
+    "cameraView"
+);
+
+function renderCameraView(){
+
+    cameraText.innerHTML =
+    "CAM " + currentCam;
+
+    if(currentCam === 1){
+
+        cameraView.innerHTML = `
+        <div class="camObject"
+        style="
+        width:80px;
+        height:180px;
+        left:60%;
+        top:35%;
+        background:white;
+        ">
+        </div>
+        `;
+    }
+
+    if(currentCam === 2){
+
+        cameraView.innerHTML = `
+        <div class="camObject"
+        style="
+        width:120px;
+        height:120px;
+        left:30%;
+        top:45%;
+        background:red;
+        border-radius:50%;
+        ">
+        </div>
+        `;
+    }
+
+    if(currentCam === 3){
+
+        cameraView.innerHTML = `
+        <div style="
+        position:absolute;
+        left:50%;
+        top:50%;
+        transform:
+        translate(-50%,-50%);
+        color:white;
+        font-size:28px;
+        ">
+        LOCKED DOOR
+        </div>
+        `;
+    }
+}
+
+document.addEventListener(
+    "keydown",
+    (e)=>{
+
+        if(
+            e.code === "KeyC" &&
+            cameraPower
+        ){
+
+            cameraOpened =
+            !cameraOpened;
+
+            overlay.style.display =
+            cameraOpened ? "block" : "none";
+
+            renderCameraView();
+        }
+
+        if(cameraOpened){
+
+            if(e.code === "KeyQ"){
+
+                currentCam--;
+
+                if(currentCam < 1){
+                    currentCam = 3;
+                }
+
+                renderCameraView();
+            }
+
+            if(e.code === "KeyE"){
+
+                currentCam++;
+
+                if(currentCam > 3){
+                    currentCam = 1;
+                }
+
+                renderCameraView();
+            }
+
+            if(
+                e.code === "Space" &&
+                currentCam === 3
+            ){
+
+                gameCompleted = true;
+
+                door.position.y = -5;
+
+                showMessage(
+                    "管理室の扉を解放した"
+                );
+
+                updatePowerUI();
+            }
+
+            if(e.code === "Escape"){
+
+                cameraOpened = false;
+
+                overlay.style.display =
+                "none";
+            }
+        }
+    }
+);
+
 function updateEnemy(delta){
 
     const direction =
-        new THREE.Vector3();
+    new THREE.Vector3();
 
     camera.getWorldDirection(
         direction
     );
 
     const enemyDirection =
-        enemy.position.clone()
-        .sub(camera.position)
-        .normalize();
+    enemy.position.clone()
+    .sub(camera.position)
+    .normalize();
 
     const flashlightDot =
-        direction.dot(
-            enemyDirection
-        );
+    direction.dot(
+        enemyDirection
+    );
 
     const enemyDistance =
-        enemy.position.distanceTo(
-            camera.position
-        );
+    enemy.position.distanceTo(
+        camera.position
+    );
 
     const flashlightHits =
-        flashlightOn &&
-        flashlightDot > 0.92 &&
-        enemyDistance < 15;
+    flashlightOn &&
+    flashlightDot > 0.92 &&
+    enemyDistance < 15;
 
     if(!flashlightHits){
 
         const moveDir =
-            camera.position.clone()
-            .sub(enemy.position)
-            .normalize();
+        camera.position.clone()
+        .sub(enemy.position)
+        .normalize();
 
         enemy.position.add(
             moveDir.multiplyScalar(
-                delta * 1.6
+                delta * 1.7
             )
         );
     }
@@ -685,13 +802,17 @@ function updateEnemy(delta){
     }
 }
 
-const clock = new THREE.Clock();
+const clock =
+new THREE.Clock();
 
 function animate(){
 
-    requestAnimationFrame(animate);
+    requestAnimationFrame(
+        animate
+    );
 
-    const delta = clock.getDelta();
+    const delta =
+    clock.getDelta();
 
     let moveSpeed = 4;
 
@@ -717,7 +838,7 @@ function animate(){
     document.getElementById(
         "staminaFill"
     ).style.width =
-        stamina + "%";
+    stamina + "%";
 
     if(keys["ArrowLeft"]){
         yaw += 1.5 * delta;
@@ -740,27 +861,28 @@ function animate(){
         Math.min(1.2,pitch)
     );
 
-    camera.rotation.order = "YXZ";
+    camera.rotation.order =
+    "YXZ";
 
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
 
     const forward =
-        new THREE.Vector3(
-            -Math.sin(yaw),
-            0,
-            -Math.cos(yaw)
-        );
+    new THREE.Vector3(
+        -Math.sin(yaw),
+        0,
+        -Math.cos(yaw)
+    );
 
     const right =
-        new THREE.Vector3(
-            -forward.z,
-            0,
-            forward.x
-        );
+    new THREE.Vector3(
+        -forward.z,
+        0,
+        forward.x
+    );
 
     const oldPosition =
-        camera.position.clone();
+    camera.position.clone();
 
     if(keys["KeyW"]){
 
@@ -810,7 +932,7 @@ function animate(){
     );
 
     const direction =
-        new THREE.Vector3();
+    new THREE.Vector3();
 
     camera.getWorldDirection(
         direction
@@ -824,7 +946,10 @@ function animate(){
 
     updateEnemy(delta);
 
-    renderer.render(scene,camera);
+    renderer.render(
+        scene,
+        camera
+    );
 }
 
 animate();
@@ -834,8 +959,8 @@ window.addEventListener(
     ()=>{
 
         camera.aspect =
-            window.innerWidth /
-            window.innerHeight;
+        window.innerWidth /
+        window.innerHeight;
 
         camera.updateProjectionMatrix();
 
