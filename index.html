@@ -2,155 +2,157 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Poppy Playtime - Keyboard Only Edition</title>
+    <title>Poppy Playtime - Cube Pack Edition</title>
     <style>
-        body { margin: 0; background: #050505; color: #eee; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        body { margin: 0; background: #000; color: #eee; font-family: sans-serif; overflow: hidden; }
         #game-view { 
             position: relative; width: 800px; height: 500px; margin: 50px auto; 
-            border: 10px solid #222; overflow: hidden; background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+            border: 8px solid #333; overflow: hidden; background: #0a0a0a;
+            perspective: 1000px; /* 3D効果用 */
         }
         
-        /* 視点移動するステージ */
         #stage {
             position: absolute; width: 2000px; height: 100%; left: -600px;
             transition: left 0.1s linear;
         }
 
-        /* 背景：不気味なタイルと柱 */
-        .bg-pattern {
-            position: absolute; width: 100%; height: 100%;
-            background-image: 
-                linear-gradient(90deg, #111 2px, transparent 2px),
-                linear-gradient(#111 2px, transparent 2px);
-            background-size: 100px 100px;
-            opacity: 0.5;
-        }
-
-        /* キャラクター */
-        #huggy { 
-            position: absolute; width: 200px; bottom: 80px; left: 900px; 
-            font-size: 120px; text-align: center; transition: transform 0.1s;
-            filter: drop-shadow(0 0 10px #00f);
-        }
-
-        /* ターゲットスイッチ */
+        /* ターゲット */
         .target { 
-            position: absolute; width: 120px; height: 120px; background: #222; 
-            border: 6px inset #444; top: 180px; display: flex; 
-            flex-direction: column; align-items: center; justify-content: center;
+            position: absolute; width: 100px; height: 100px; top: 180px;
+            border: 5px solid; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; background: rgba(255,255,255,0.1);
         }
-        .target b { font-size: 24px; margin-bottom: 5px; }
-        #target-l { left: 400px; border-color: #0055ff; color: #0055ff; }
-        #target-r { left: 1480px; border-color: #ff0000; color: #ff0000; }
-        .active { background: #fff !important; box-shadow: 0 0 40px #fff; color: #000 !important; }
+        #target-l { left: 450px; border-color: #00aaff; color: #00aaff; }
+        #target-r { left: 1450px; border-color: #ff4400; color: #ff4400; }
+        .active { background: #fff !important; transform: scale(1.1); }
 
-        /* グラブパック（画面固定） */
-        .hand { position: absolute; width: 100px; bottom: -30px; transition: 0.15s ease-out; z-index: 100; }
-        #hand-left { left: 150px; transform: translateY(200px); filter: hue-rotate(0deg); }
-        #hand-right { right: 150px; transform: translateY(200px); filter: hue-rotate(140deg); }
+        #huggy { position: absolute; left: 950px; bottom: 100px; font-size: 100px; transition: transform 0.1s; }
+
+        /* 立方体（GrabPack）のスタイル */
+        .cube-container {
+            position: absolute; bottom: -20px; width: 60px; height: 60px;
+            transform-style: preserve-3d; transition: transform 0.2s ease-out;
+            z-index: 100;
+        }
+        #cube-l { left: 150px; transform: translateY(200px) rotateX(20deg) rotateY(20deg); }
+        #cube-r { right: 150px; transform: translateY(200px) rotateX(20deg) rotateY(-20deg); }
+
+        .cube {
+            position: relative; width: 60px; height: 60px; transform-style: preserve-3d;
+        }
+        .face {
+            position: absolute; width: 60px; height: 60px; border: 2px solid rgba(255,255,255,0.5);
+            line-height: 60px; text-align: center; font-size: 30px;
+        }
+        /* 面の配置 */
+        .front  { transform: translateZ(30px); }
+        .back   { transform: rotateY(180deg) translateZ(30px); }
+        .right  { transform: rotateY(90deg) translateZ(30px); }
+        .left   { transform: rotateY(-90deg) translateZ(30px); }
+        .top    { transform: rotateX(90deg) translateZ(30px); }
+        .bottom { transform: rotateX(-90deg) translateZ(30px); }
+
+        .blue-cube .face { background: rgba(0, 100, 255, 0.8); }
+        .red-cube .face { background: rgba(255, 50, 0, 0.8); }
 
         #ui { text-align: center; margin-top: 20px; }
-        .kbd { background: #444; padding: 2px 8px; border-radius: 4px; border-bottom: 3px solid #222; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <h2>FACTORY SECURITY MONITOR</h2>
-    <p>視点移動: <span class="kbd">←</span> <span class="kbd">→</span> | 青い手: <span class="kbd">A</span> | 赤い手: <span class="kbd">D</span></p>
-    <h3 id="status" style="color: #0f0;">SYSTEM ONLINE</h3>
+    <h2>CUBE-PACK SYSTEM</h2>
+    <p>Move: <kbd>←</kbd> <kbd>→</kbd> | Launch: <kbd>A</kbd> (Blue) <kbd>D</kbd> (Red)</p>
+    <h3 id="status">READY</h3>
 </div>
 
 <div id="game-view">
     <div id="stage">
-        <div class="bg-pattern"></div>
-        <div id="target-l" class="target"><b>[A]</b>PUSH</div>
-        <div id="target-r" class="target"><b>[D]</b>PUSH</div>
+        <div id="target-l" class="target">BLUE</div>
+        <div id="target-r" class="target">RED</div>
         <div id="huggy">👹</div>
     </div>
     
-    <img id="hand-left" class="hand" src="https://img.icons8.com/color/96/blue-hand.png">
-    <img id="hand-right" class="hand" src="https://img.icons8.com/color/96/red-hand.png">
+    <!-- 青い立方体 -->
+    <div id="cube-l" class="cube-container blue-cube">
+        <div class="cube">
+            <div class="face front">■</div><div class="face back"></div>
+            <div class="face right"></div><div class="face left"></div>
+            <div class="face top"></div><div class="face bottom"></div>
+        </div>
+    </div>
+
+    <!-- 赤い立方体 -->
+    <div id="cube-r" class="cube-container red-cube">
+        <div class="cube">
+            <div class="face front">■</div><div class="face back"></div>
+            <div class="face right"></div><div class="face left"></div>
+            <div class="face top"></div><div class="face bottom"></div>
+        </div>
+    </div>
 </div>
 
 <script>
     const stage = document.getElementById('stage');
     const huggy = document.getElementById('huggy');
     const statusText = document.getElementById('status');
-    const handL = document.getElementById('hand-left');
-    const handR = document.getElementById('hand-right');
+    const cubeL = document.getElementById('cube-l');
+    const cubeR = document.getElementById('cube-r');
 
     let cameraX = -600;
     let huggyScale = 1;
     let gameOver = false;
-
-    // キーボード入力の状態管理
     const keys = {};
-    window.addEventListener('keydown', e => keys[e.code] = true);
+
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (gameOver) return;
+        if (e.code === 'KeyA') launchCube(cubeL, 'L');
+        if (e.code === 'KeyD') launchCube(cubeR, 'R');
+    });
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    // 単発押しイベント（AキーとDキー）
-    window.addEventListener('keydown', (e) => {
-        if (gameOver) return;
-        if (e.code === 'KeyA') shoot('L');
-        if (e.code === 'KeyD') shoot('R');
-    });
-
-    function shoot(side) {
-        const hand = (side === 'L') ? handL : handR;
-        const target = (side === 'L') ? document.getElementById('target-l') : document.getElementById('target-r');
-        
-        // アニメーション
-        hand.style.transform = "translateY(-400px)";
+    function launchCube(cube, side) {
+        // 発射アニメーション（回転しながら飛ぶ）
+        cube.style.transform = `translateY(-350px) rotateX(360deg) rotateY(360deg)`;
         
         setTimeout(() => {
-            // 当たり判定：ターゲットが画面の一定範囲内にあるか
-            // ステージの左端からの距離とcameraXの関係で判定
-            const targetPos = (side === 'L') ? (400 + cameraX) : (1480 + cameraX);
-            
-            // 画面中央（400px付近）にターゲットがいればヒット
-            if (targetPos > 250 && targetPos < 450) {
+            const targetPos = (side === 'L') ? (450 + cameraX) : (1450 + cameraX);
+            const target = document.getElementById(side === 'L' ? 'target-l' : 'target-r');
+
+            if (targetPos > 300 && targetPos < 500) {
                 target.classList.add('active');
-                huggyScale = Math.max(0.5, huggyScale - 0.4);
-                statusText.innerText = "CRITICAL HIT!";
-                statusText.style.color = "#fff";
-                setTimeout(() => { statusText.innerText = "KEEP DISTANCE"; statusText.style.color = "#ff0"; }, 500);
+                huggyScale = Math.max(1, huggyScale - 0.5);
+                statusText.innerText = "HIT!";
+                setTimeout(() => target.classList.remove('active'), 200);
             }
 
+            // 戻る
             setTimeout(() => {
-                hand.style.transform = "translateY(200px)";
-                target.classList.remove('active');
-            }, 300);
-        }, 150);
+                cube.style.transform = side === 'L' 
+                    ? "translateY(200px) rotateX(20deg) rotateY(20deg)" 
+                    : "translateY(200px) rotateX(20deg) rotateY(-20deg)";
+            }, 200);
+        }, 200);
     }
 
-    // ゲームループ（移動とハギーの接近）
     function update() {
         if (gameOver) return;
-
-        // 視点移動
-        if (keys['ArrowLeft']) cameraX += 12;
-        if (keys['ArrowRight']) cameraX -= 12;
-        
-        // 移動範囲制限
+        if (keys['ArrowLeft']) cameraX += 10;
+        if (keys['ArrowRight']) cameraX -= 10;
         cameraX = Math.min(Math.max(cameraX, -1200), 0);
         stage.style.left = cameraX + "px";
 
-        // ハギー接近
-        huggyScale += 0.004;
+        huggyScale += 0.005;
         huggy.style.transform = `scale(${huggyScale})`;
 
         if (huggyScale > 5) {
             gameOver = true;
-            statusText.innerText = "FATAL ERROR: TOY BREACHED";
-            statusText.style.color = "red";
-            huggy.innerText = "💀";
-            document.body.style.backgroundColor = "#200";
+            statusText.innerText = "GAME OVER";
+            huggy.innerHTML = "💀";
         }
-
         requestAnimationFrame(update);
     }
-
     update();
 </script>
 </body>
