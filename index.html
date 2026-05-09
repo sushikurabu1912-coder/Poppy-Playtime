@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Rooftop Horror Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ROOFTOP HORROR</title>
 
 <style>
 *{
@@ -18,6 +18,10 @@ body{
     background:black;
 }
 
+canvas{
+    display:block;
+}
+
 #ui{
     position:fixed;
     inset:0;
@@ -30,7 +34,7 @@ body{
     left:50%;
     top:50%;
     transform:translate(-50%,-50%);
-    font-size:22px;
+    font-size:20px;
     opacity:0.8;
 }
 
@@ -38,30 +42,31 @@ body{
     position:absolute;
     top:20px;
     left:20px;
+    width:340px;
     background:rgba(0,0,0,0.5);
-    padding:12px 16px;
     border:1px solid rgba(255,255,255,0.2);
+    padding:14px;
+    line-height:1.7;
     font-size:14px;
-    width:300px;
 }
 
 #message{
     position:absolute;
-    bottom:40px;
     left:50%;
+    bottom:40px;
     transform:translateX(-50%);
-    background:rgba(0,0,0,0.6);
+    background:rgba(0,0,0,0.7);
     padding:12px 20px;
-    font-size:15px;
     opacity:0;
-    transition:0.4s;
+    transition:0.3s;
+    font-size:15px;
 }
 
 #stamina{
     position:absolute;
-    bottom:20px;
     left:20px;
-    width:200px;
+    bottom:20px;
+    width:220px;
     height:12px;
     border:1px solid white;
 }
@@ -72,12 +77,22 @@ body{
     background:white;
 }
 
+#flashlight{
+    position:absolute;
+    right:20px;
+    bottom:20px;
+    background:rgba(0,0,0,0.5);
+    border:1px solid rgba(255,255,255,0.3);
+    padding:10px 14px;
+    font-size:14px;
+}
+
 #fade{
     position:fixed;
     inset:0;
     background:black;
-    pointer-events:none;
     opacity:0;
+    pointer-events:none;
     transition:1s;
 }
 </style>
@@ -86,11 +101,18 @@ body{
 <body>
 
 <div id="ui">
+
     <div id="crosshair">+</div>
 
     <div id="objective">
         <b>OBJECTIVE</b><br>
-        屋上中央電源を復旧する
+        屋上中央電源を復旧する<br><br>
+
+        WASD : 移動<br>
+        SHIFT : ダッシュ<br>
+        E : 調べる<br>
+        F : ライト ON/OFF<br>
+        矢印キー : 視点移動
     </div>
 
     <div id="message"></div>
@@ -99,16 +121,20 @@ body{
         <div id="staminaFill"></div>
     </div>
 
+    <div id="flashlight">
+        FLASHLIGHT : OFF
+    </div>
+
     <div id="fade"></div>
+
 </div>
 
 <script type="module">
 
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/PointerLockControls.js";
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x000000, 10, 60);
+scene.fog = new THREE.Fog(0x050505, 6, 38);
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -117,51 +143,66 @@ const camera = new THREE.PerspectiveCamera(
     1000
 );
 
-const renderer = new THREE.WebGLRenderer({ antialias:true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-document.body.appendChild(renderer.domElement);
+camera.position.set(0,2,12);
 
-renderer.setClearColor(0x050505);
-
-const controls = new PointerLockControls(camera, document.body);
-
-document.body.addEventListener("click", () => {
-    controls.lock();
+const renderer = new THREE.WebGLRenderer({
+    antialias:true
 });
 
-scene.add(controls.getObject());
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.setClearColor(0x050505);
 
-camera.position.set(0,2,10);
+document.body.appendChild(renderer.domElement);
 
-const ambient = new THREE.AmbientLight(0x404040,1.2);
+const ambient = new THREE.AmbientLight(0x404040,0.25);
 scene.add(ambient);
 
-const moon = new THREE.DirectionalLight(0xffffff,1);
+const moon = new THREE.DirectionalLight(0x99bbff,0.3);
 moon.position.set(10,20,10);
 moon.castShadow = true;
 scene.add(moon);
 
-const floorGeo = new THREE.PlaneGeometry(100,100);
-const floorMat = new THREE.MeshStandardMaterial({
-    color:0x2b2b2b,
-    roughness:1
-});
+const flashlight = new THREE.SpotLight(
+    0xffffff,
+    0
+);
 
-const floor = new THREE.Mesh(floorGeo,floorMat);
+flashlight.angle = 0.35;
+flashlight.penumbra = 0.5;
+flashlight.distance = 25;
+flashlight.castShadow = true;
+
+scene.add(flashlight);
+scene.add(flashlight.target);
+
+let flashlightOn = false;
+
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(100,100),
+    new THREE.MeshStandardMaterial({
+        color:0x2b2b2b,
+        roughness:1
+    })
+);
+
 floor.rotation.x = -Math.PI/2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-function createWall(x,y,z,w,h,d,color=0x444444){
+function createWall(x,y,z,w,h,d,color=0x333333){
+
     const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(w,h,d),
-        new THREE.MeshStandardMaterial({ color })
+        new THREE.MeshStandardMaterial({
+            color:color
+        })
     );
 
     mesh.position.set(x,y,z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+
     scene.add(mesh);
 
     return mesh;
@@ -172,22 +213,64 @@ createWall(-20,2,0,1,4,40);
 createWall(20,2,0,1,4,40);
 createWall(0,2,20,40,4,1);
 
-createWall(-10,2,-5,8,4,8,0x303030);
-createWall(10,2,-5,8,4,8,0x303030);
-createWall(0,2,8,12,4,6,0x303030);
+createWall(-11,2,-4,8,4,8,0x2a2a2a);
+createWall(11,2,-5,8,4,8,0x2a2a2a);
+createWall(0,2,8,12,4,6,0x2a2a2a);
+
+function createLamp(x,z){
+
+    const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1,0.1,5),
+        new THREE.MeshStandardMaterial({
+            color:0x555555
+        })
+    );
+
+    pole.position.set(x,2.5,z);
+    scene.add(pole);
+
+    const light = new THREE.PointLight(
+        0xffddaa,
+        1.5,
+        12
+    );
+
+    light.position.set(x,4.5,z);
+    scene.add(light);
+
+    const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2),
+        new THREE.MeshBasicMaterial({
+            color:0xffcc88
+        })
+    );
+
+    bulb.position.copy(light.position);
+
+    scene.add(bulb);
+}
+
+createLamp(-8,-8);
+createLamp(8,-8);
+createLamp(0,8);
 
 const carousel = new THREE.Group();
 
 const base = new THREE.Mesh(
     new THREE.CylinderGeometry(5,5,1,32),
-    new THREE.MeshStandardMaterial({ color:0x662222 })
+    new THREE.MeshStandardMaterial({
+        color:0x772222,
+        emissive:0x220000
+    })
 );
 
 carousel.add(base);
 
 const pole = new THREE.Mesh(
     new THREE.CylinderGeometry(0.3,0.3,6),
-    new THREE.MeshStandardMaterial({ color:0x999999 })
+    new THREE.MeshStandardMaterial({
+        color:0xaaaaaa
+    })
 );
 
 pole.position.y = 3;
@@ -197,7 +280,10 @@ for(let i=0;i<6;i++){
 
     const horse = new THREE.Mesh(
         new THREE.BoxGeometry(1,1,2),
-        new THREE.MeshStandardMaterial({ color:0xffffff*Math.random() })
+        new THREE.MeshStandardMaterial({
+            color:0xffffff * Math.random(),
+            emissive:0x111111
+        })
     );
 
     const angle = (Math.PI*2/6)*i;
@@ -212,29 +298,34 @@ for(let i=0;i<6;i++){
 }
 
 carousel.position.set(0,0,-8);
+
 scene.add(carousel);
 
 const panda = new THREE.Group();
 
 const body = new THREE.Mesh(
     new THREE.SphereGeometry(1.2,32,32),
-    new THREE.MeshStandardMaterial({ color:0xffffff })
+    new THREE.MeshStandardMaterial({
+        color:0xffffff
+    })
 );
 
 body.position.y = 1.2;
-panda.add(body);
 
 const head = new THREE.Mesh(
     new THREE.SphereGeometry(0.9,32,32),
-    new THREE.MeshStandardMaterial({ color:0xffffff })
+    new THREE.MeshStandardMaterial({
+        color:0xffffff
+    })
 );
 
 head.position.y = 3;
-panda.add(head);
 
 const eye1 = new THREE.Mesh(
-    new THREE.SphereGeometry(0.1),
-    new THREE.MeshBasicMaterial({ color:0xff0000 })
+    new THREE.SphereGeometry(0.12),
+    new THREE.MeshBasicMaterial({
+        color:0xff0000
+    })
 );
 
 eye1.position.set(-0.2,3,0.8);
@@ -242,43 +333,69 @@ eye1.position.set(-0.2,3,0.8);
 const eye2 = eye1.clone();
 eye2.position.x = 0.2;
 
+panda.add(body);
+panda.add(head);
 panda.add(eye1);
 panda.add(eye2);
 
 panda.position.set(12,0,-12);
+
 scene.add(panda);
 
 const fuse = new THREE.Mesh(
     new THREE.BoxGeometry(0.5,0.5,0.5),
-    new THREE.MeshStandardMaterial({ color:0xffff00, emissive:0x888800 })
+    new THREE.MeshStandardMaterial({
+        color:0xffff00,
+        emissive:0x888800
+    })
 );
 
-fuse.position.set(-10,1,-5);
+fuse.position.set(-11,1,-4);
+
 scene.add(fuse);
 
 const breaker = new THREE.Mesh(
     new THREE.BoxGeometry(1,2,1),
-    new THREE.MeshStandardMaterial({ color:0x00ffcc, emissive:0x003333 })
+    new THREE.MeshStandardMaterial({
+        color:0x00ffcc,
+        emissive:0x004444
+    })
 );
 
 breaker.position.set(14,1,10);
+
 scene.add(breaker);
-
-let hasFuse = false;
-let powerOn = false;
-
-const velocity = new THREE.Vector3();
-const direction = new THREE.Vector3();
 
 const keys = {};
 
 document.addEventListener("keydown",(e)=>{
-    keys[e.code]=true;
+
+    keys[e.code] = true;
+
+    if(e.code === "KeyF"){
+
+        flashlightOn = !flashlightOn;
+
+        flashlight.intensity = flashlightOn ? 5 : 0;
+
+        document.getElementById("flashlight").innerHTML =
+            "FLASHLIGHT : " + (flashlightOn ? "ON" : "OFF");
+    }
 });
 
 document.addEventListener("keyup",(e)=>{
-    keys[e.code]=false;
+    keys[e.code] = false;
 });
+
+let yaw = 0;
+let pitch = 0;
+
+const player = {
+    speed:4,
+    sprint:8
+};
+
+let stamina = 100;
 
 const message = document.getElementById("message");
 
@@ -292,55 +409,34 @@ function showMessage(text){
     },3000);
 }
 
-showMessage("クリックでゲーム開始");
+showMessage("屋上へ到着した");
 
 function distance(a,b){
+
     return a.position.distanceTo(b.position);
 }
 
-let stamina = 100;
-
-function updatePlayer(delta){
-
-    const speed = keys["ShiftLeft"] ? 8 : 4;
-
-    if(keys["ShiftLeft"] && stamina > 0){
-        stamina -= 25 * delta;
-    }else{
-        stamina += 15 * delta;
-    }
-
-    stamina = Math.max(0,Math.min(100,stamina));
-
-    document.getElementById("staminaFill").style.width = stamina + "%";
-
-    direction.z = Number(keys["KeyW"]) - Number(keys["KeyS"]);
-    direction.x = Number(keys["KeyD"]) - Number(keys["KeyA"]);
-    direction.normalize();
-
-    controls.moveRight(direction.x * speed * delta);
-    controls.moveForward(direction.z * speed * delta);
-}
+let hasFuse = false;
+let powerOn = false;
 
 function interact(){
 
-    const playerPos = controls.getObject().position;
-
-    if(distance({position:playerPos}, fuse) < 2 && !hasFuse){
+    if(distance(camera,fuse) < 2 && !hasFuse){
 
         hasFuse = true;
+
         scene.remove(fuse);
 
         showMessage("ヒューズを入手した");
     }
 
-    if(distance({position:playerPos}, breaker) < 3 && hasFuse && !powerOn){
+    if(distance(camera,breaker) < 3 && hasFuse && !powerOn){
 
         powerOn = true;
 
-        showMessage("中央電源を復旧した");
+        moon.intensity = 0.8;
 
-        moon.intensity = 2;
+        showMessage("中央電源を復旧した");
 
         setTimeout(()=>{
             showMessage("まもなく閉店時間です");
@@ -353,14 +449,15 @@ function interact(){
 }
 
 document.addEventListener("keydown",(e)=>{
-    if(e.code==="KeyE"){
+
+    if(e.code === "KeyE"){
         interact();
     }
 });
 
-let pandaTimer = 0;
-
 const clock = new THREE.Clock();
+
+let pandaTimer = 0;
 
 function animate(){
 
@@ -368,9 +465,102 @@ function animate(){
 
     const delta = clock.getDelta();
 
-    updatePlayer(delta);
+    let moveSpeed = player.speed;
 
-    carousel.rotation.y += 0.3 * delta;
+    if(keys["ShiftLeft"] && stamina > 0){
+
+        moveSpeed = player.sprint;
+
+        stamina -= 28 * delta;
+
+    }else{
+
+        stamina += 18 * delta;
+    }
+
+    stamina = Math.max(0,Math.min(100,stamina));
+
+    document.getElementById("staminaFill").style.width =
+        stamina + "%";
+
+    if(keys["ArrowLeft"]){
+        yaw += 1.8 * delta;
+    }
+
+    if(keys["ArrowRight"]){
+        yaw -= 1.8 * delta;
+    }
+
+    if(keys["ArrowUp"]){
+        pitch += 1.5 * delta;
+    }
+
+    if(keys["ArrowDown"]){
+        pitch -= 1.5 * delta;
+    }
+
+    pitch = Math.max(-1.2,Math.min(1.2,pitch));
+
+    camera.rotation.order = "YXZ";
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+
+    const forward = new THREE.Vector3(
+        Math.sin(yaw),
+        0,
+        Math.cos(yaw)
+    );
+
+    const right = new THREE.Vector3(
+        forward.z,
+        0,
+        -forward.x
+    );
+
+    if(keys["KeyW"]){
+
+        camera.position.addScaledVector(
+            forward,
+            -moveSpeed * delta
+        );
+    }
+
+    if(keys["KeyS"]){
+
+        camera.position.addScaledVector(
+            forward,
+            moveSpeed * delta
+        );
+    }
+
+    if(keys["KeyA"]){
+
+        camera.position.addScaledVector(
+            right,
+            moveSpeed * delta
+        );
+    }
+
+    if(keys["KeyD"]){
+
+        camera.position.addScaledVector(
+            right,
+            -moveSpeed * delta
+        );
+    }
+
+    flashlight.position.copy(camera.position);
+
+    const targetDirection = new THREE.Vector3();
+    camera.getWorldDirection(targetDirection);
+
+    flashlight.target.position.copy(
+        camera.position.clone().add(
+            targetDirection.multiplyScalar(10)
+        )
+    );
+
+    carousel.rotation.y += 0.25 * delta;
 
     panda.lookAt(camera.position);
 
@@ -385,6 +575,7 @@ function animate(){
             panda.position.x = (Math.random()*30)-15;
             panda.position.z = (Math.random()*30)-15;
         }
+
     }else{
 
         panda.position.lerp(
@@ -396,7 +587,7 @@ function animate(){
             0.002
         );
 
-        if(distance(panda,camera) < 2){
+        if(distance(camera,panda) < 2){
 
             document.getElementById("fade").style.opacity = 1;
 
@@ -415,7 +606,9 @@ animate();
 
 window.addEventListener("resize",()=>{
 
-    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.aspect =
+        window.innerWidth / window.innerHeight;
+
     camera.updateProjectionMatrix();
 
     renderer.setSize(
