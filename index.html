@@ -104,7 +104,7 @@ canvas{
 
     <div id="crosshair">+</div>
 
-    <div id="objective" id="objectiveText">
+    <div id="objective">
         <b>OBJECTIVE</b><br><br>
 
         管理室に入るために<br>
@@ -143,7 +143,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const scene = new THREE.Scene();
 
-scene.fog = new THREE.Fog(0x000000,2,24);
+scene.fog = new THREE.Fog(0x000000,8,45);
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -164,10 +164,10 @@ renderer.setClearColor(0x000000);
 
 document.body.appendChild(renderer.domElement);
 
-const ambient = new THREE.AmbientLight(0x222222,0.22);
+const ambient = new THREE.AmbientLight(0x404040,0.5);
 scene.add(ambient);
 
-const moon = new THREE.DirectionalLight(0x88aaff,0.18);
+const moon = new THREE.DirectionalLight(0xaaccff,0.45);
 moon.position.set(10,20,10);
 moon.castShadow = true;
 scene.add(moon);
@@ -191,7 +191,7 @@ let flashlightOn = false;
 const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(100,100),
     new THREE.MeshStandardMaterial({
-        color:0x1a1a1a,
+        color:0x2c2c2c,
         roughness:1
     })
 );
