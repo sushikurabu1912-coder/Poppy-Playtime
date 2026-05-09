@@ -2,48 +2,31 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Mascot Horror Prototype</title>
+    <title>Mascot Horror - Kill Animation</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; }
-        /* ビネット効果（画面の四隅を暗くする） */
+        body { margin: 0; overflow: hidden; background-color: #080808; font-family: 'Courier New', monospace; }
         #viewport {
             position: fixed; width: 100%; height: 100%;
-            box-shadow: inset 0 0 150px rgba(0,0,0,0.9);
+            box-shadow: inset 0 0 180px rgba(0,0,0,0.85); /* ビネット */
             pointer-events: none; z-index: 5;
         }
         #ui {
             position: absolute; top: 20px; left: 20px; color: #fff;
-            background: rgba(0,0,0,0.6); padding: 15px; border-radius: 5px;
-            border-left: 5px solid #ff00ff; z-index: 10;
+            background: rgba(0,0,0,0.5); padding: 12px; border-left: 4px solid #f00; z-index: 10;
         }
-        #subtitle {
-            position: absolute; bottom: 15%; width: 100%; text-align: center;
-            color: #ffff00; font-size: 1.5em; text-shadow: 2px 2px #000;
-            opacity: 0; transition: opacity 0.3s; z-index: 10;
-        }
-        /* ジャンプスケアの画像（CSSで不気味な顔を模倣） */
-        #jumpscare {
-            position: fixed; top:0; left:0; width:100%; height:100%;
-            background: #f00; display: none; z-index: 100;
-            justify-content: center; align-items: center;
-        }
-        #scare-face {
-            width: 300px; height: 300px; background: #000; border-radius: 50%;
-            box-shadow: 0 0 100px #fff; display: flex; justify-content: space-around; align-items: center;
+        #noise { /* 襲われた時のノイズ演出 */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://media.giphy.com/media/oEI9uWUicGhoY/giphy.gif');
+            opacity: 0; pointer-events: none; z-index: 100; mix-blend-mode: screen;
         }
     </style>
 </head>
 <body>
     <div id="viewport"></div>
+    <div id="noise"></div>
     <div id="ui">
-        <div style="font-size: 0.7em; color: #ff00ff;">FACILITY LOG: ONLINE</div>
-        <div id="mission">パズル：正しい順序でコアを集めろ</div>
-        <div id="hint" style="color: #0ff; font-size: 0.9em; margin-top: 5px;">HINT: 赤 -> 青 -> 緑</div>
-    </div>
-    <div id="subtitle"></div>
-    <div id="jumpscare">
-        <div id="scare-face"><div style="width:50px;height:50px;background:#fff;border-radius:50%"></div><div style="width:50px;height:50px;background:#fff;border-radius:50%"></div></div>
-        <h1 style="position:absolute; color:#fff; font-size:5em;">YOU FOUND ME</h1>
+        <div id="mission">MISSION: 正しい順序でコアを回収せよ</div>
+        <div style="font-size: 0.8em; color: #aaa;">HINT: 赤 -> 青 -> 緑</div>
     </div>
 
     <script type="importmap">
@@ -54,8 +37,8 @@
         import * as THREE from 'three';
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x020205);
-        scene.fog = new THREE.Fog(0x020205, 1, 40);
+        scene.background = new THREE.Color(0x050508);
+        scene.fog = new THREE.Fog(0x050508, 1, 50);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 1.6, 15);
@@ -65,121 +48,120 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- ライト ---
-        const ambient = new THREE.AmbientLight(0x404040, 0.3);
+        // --- ライティング（Poppy Playtime風に明るさを底上げ） ---
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4); // 周囲をうっすら見せる
         scene.add(ambient);
-        const flashlight = new THREE.SpotLight(0xffffff, 200, 40, Math.PI/6, 0.4, 1.2);
+
+        const flashlight = new THREE.SpotLight(0xffffff, 200, 45, Math.PI/5, 0.3);
         flashlight.castShadow = true;
         camera.add(flashlight);
         flashlight.target.position.set(0, 0, -1);
         camera.add(flashlight.target);
         scene.add(camera);
 
-        // --- マップ作成 ---
+        // --- 敵（襲ってくるマスコット） ---
+        const enemyGroup = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3, 1), new THREE.MeshStandardMaterial({color: 0xaa0000}));
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xff0000}));
+        eye.position.set(0.4, 1, 0.5);
+        const eye2 = eye.clone(); eye2.position.x = -0.4;
+        enemyGroup.add(body, eye, eye2);
+        enemyGroup.position.set(0, 0, -10);
+        scene.add(enemyGroup);
+
+        // --- マップ ---
         const walls = [];
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
         const createWall = (w, h, d, x, z) => {
             const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
             m.position.set(x, h/2, z);
-            m.castShadow = true;
             m.receiveShadow = true;
             scene.add(m);
             walls.push(m);
         };
-        // 外壁
         createWall(40, 6, 2, 0, 20); createWall(40, 6, 2, 0, -20);
         createWall(2, 6, 40, 20, 0); createWall(2, 6, 40, -20, 0);
-        // 地面
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color:0x111111}));
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color:0x151515}));
         floor.rotation.x = -Math.PI/2;
-        floor.receiveShadow = true;
         scene.add(floor);
 
-        // --- パズル要素（コア） ---
+        // --- パズル（コア） ---
         const cores = [];
-        const puzzleOrder = [0xff0000, 0x0000ff, 0x00ff00]; // 赤、青、緑
-        const corePos = [{x:-10, z:-5}, {x:10, z:-10}, {x:0, z:-15}];
-        
-        corePos.forEach((p, i) => {
-            const g = new THREE.Group();
-            const mesh = new THREE.Mesh(
-                new THREE.IcosahedronGeometry(0.5, 0),
-                new THREE.MeshStandardMaterial({ color: puzzleOrder[i], emissive: puzzleOrder[i], emissiveIntensity: 2 })
-            );
-            const light = new THREE.PointLight(puzzleOrder[i], 10, 8);
-            g.add(mesh); g.add(light);
-            g.position.set(p.x, 1, p.z);
-            g.userData = { id: i, color: puzzleOrder[i] };
-            scene.add(g);
-            cores.push(g);
+        const colors = [0xff0000, 0x0000ff, 0x00ff00];
+        [{x:-8,z:5}, {x:8,z:-5}, {x:0,z:-12}].forEach((p, i) => {
+            const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5), new THREE.MeshStandardMaterial({color: colors[i], emissive: colors[i]}));
+            c.position.set(p.x, 1, p.z);
+            c.userData = { id: i };
+            scene.add(c);
+            cores.push(c);
         });
 
-        // --- カセットテープ ---
-        const tape = new THREE.Mesh(
-            new THREE.BoxGeometry(0.6, 0.1, 0.4),
-            new THREE.MeshStandardMaterial({ color: 0xffaa00 })
-        );
-        tape.position.set(-5, 0.1, 5);
-        scene.add(tape);
-
-        // --- システム変数 ---
+        // --- ロジック変数 ---
         const keys = {};
-        let collectedCount = 0;
-        let subTimeout;
-        const subEl = document.getElementById('subtitle');
-        const scareEl = document.getElementById('jumpscare');
-
-        const speak = (txt) => {
-            clearTimeout(subTimeout);
-            subEl.innerText = txt; subEl.style.opacity = 1;
-            subTimeout = setTimeout(() => subEl.style.opacity = 0, 4000);
-        };
-
-        const triggerJumpscare = () => {
-            scareEl.style.display = 'flex';
-            setTimeout(() => location.reload(), 1500); // 強制リセット
-        };
+        let collected = 0;
+        let isDead = false;
+        let deathTimer = 0;
 
         window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // --- メインループ ---
+        function triggerDeath() {
+            if (isDead) return;
+            isDead = true;
+            document.getElementById('noise').style.opacity = 0.5;
+        }
+
         function animate() {
             requestAnimationFrame(animate);
-            const prevPos = camera.position.clone();
-            const speed = 0.13;
 
-            if(keys['KeyW']) camera.translateZ(-speed);
-            if(keys['KeyS']) camera.translateZ(speed);
-            if(keys['KeyA']) camera.translateX(-speed);
-            if(keys['KeyD']) camera.translateX(speed);
-            if(keys['ArrowLeft'] || keys['KeyJ']) camera.rotation.y += 0.04;
-            if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
+            if (!isDead) {
+                const prevPos = camera.position.clone();
+                const speed = 0.14;
+                if(keys['KeyW']) camera.translateZ(-speed);
+                if(keys['KeyS']) camera.translateZ(speed);
+                if(keys['KeyA']) camera.translateX(-speed);
+                if(keys['KeyD']) camera.translateX(speed);
+                if(keys['ArrowLeft'] || keys['KeyJ']) camera.rotation.y += 0.04;
+                if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
+                camera.position.y = 1.6;
 
-            camera.position.y = 1.6;
+                // 衝突判定
+                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1, 1, 1));
+                walls.forEach(w => { if(pBox.intersectsBox(new THREE.Box3().setFromObject(w))) camera.position.copy(prevPos); });
 
-            // 衝突判定
-            const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1, 2, 1));
-            walls.forEach(w => { if(pBox.intersectsBox(new THREE.Box3().setFromObject(w))) camera.position.copy(prevPos); });
-
-            // コア回収（パズル判定）
-            cores.forEach((c, idx) => {
-                if(c.visible && camera.position.distanceTo(c.position) < 2) {
-                    if(idx === collectedCount) {
-                        c.visible = false;
-                        collectedCount++;
-                        speak("正しい順序だ...");
-                        if(collectedCount === 3) speak("ゲートがどこかで開いた音がする...");
-                    } else {
-                        triggerJumpscare(); // 順番を間違えたら即死
+                // パズル判定
+                cores.forEach((c, idx) => {
+                    if(c.visible && camera.position.distanceTo(c.position) < 1.5) {
+                        if(idx === collected) {
+                            c.visible = false;
+                            collected++;
+                        } else {
+                            triggerDeath();
+                        }
                     }
-                }
-            });
+                });
 
-            // カセット再生
-            if(tape.visible && camera.position.distanceTo(tape.position) < 2) {
-                tape.visible = false;
-                speak("『...実験体は順調に成長している。赤、青、緑...その順序さえ守れば、奴らは大人しい...』");
+                // 敵の接近（パズルを間違えなくても、近づきすぎたら死ぬ）
+                if (camera.position.distanceTo(enemyGroup.position) < 3) triggerDeath();
+            } else {
+                // --- キルシーン演出 ---
+                deathTimer += 0.1;
+                
+                // 1. 強制的に敵の顔（カメラの高さ付近）を向かせる
+                const targetPos = new THREE.Vector3(enemyGroup.position.x, 1.6, enemyGroup.position.z);
+                camera.lookAt(targetPos);
+
+                // 2. 敵が目の前に飛び込んでくる
+                if (enemyGroup.position.distanceTo(camera.position) > 1.5) {
+                    enemyGroup.translateZ(0.5);
+                }
+
+                // 3. カメラを激しく揺らす（シェイク）
+                camera.position.x += (Math.random() - 0.5) * 0.2;
+                camera.position.y += (Math.random() - 0.5) * 0.2;
+
+                // 4. 暗転してリロード
+                if (deathTimer > 15) location.reload();
             }
 
             renderer.render(scene, camera);
