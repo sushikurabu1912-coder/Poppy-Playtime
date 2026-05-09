@@ -2,217 +2,159 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Poppy Playtime - Virtual 3D Space</title>
+    <title>3D Survival Horror Prototype</title>
     <style>
-        :root { --blue: #0055ff; --red: #ff1100; --neon: #00f2ff; }
-        body { margin: 0; background: #000; color: #fff; font-family: 'Consolas', monospace; overflow: hidden; }
-        
-        /* 3Dレンダリングの土台 */
-        #viewport {
-            width: 100vw; height: 100vh;
-            perspective: 800px;
-            display: flex; align-items: center; justify-content: center;
-            background: radial-gradient(circle at center, #111 0%, #000 100%);
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #ui {
+            position: absolute; top: 20px; left: 20px;
+            color: #f00; font-family: 'Courier New', Courier, monospace;
+            text-shadow: 2px 2px 2px #000; pointer-events: none;
         }
-
-        /* カメラと世界全体 */
-        #camera {
-            position: relative;
-            width: 0; height: 0;
-            transform-style: preserve-3d;
-            transition: transform 0.05s linear;
-        }
-
-        /* 3D構造物（壁・床） */
-        .plane {
-            position: absolute;
-            background: #1a1a1a;
-            border: 2px solid #333;
-            box-sizing: border-box;
-        }
-        .floor {
-            width: 4000px; height: 4000px;
-            transform: rotateX(90deg) translate(-50%, -50%) translateZ(-200px);
-            background-image: 
-                repeating-linear-gradient(#222 0 1px, transparent 1px 100px),
-                repeating-linear-gradient(90deg, #222 0 1px, transparent 2px 100px);
-        }
-        .wall { width: 4000px; height: 600px; top: -300px; opacity: 0.5; }
-        .wall-left  { transform: rotateY(90deg) translateZ(-1000px) translateX(-2000px); background: linear-gradient(to right, #050505, #111); }
-        .wall-right { transform: rotateY(-90deg) translateZ(-1000px) translateX(2000px); background: linear-gradient(to left, #050505, #111); }
-
-        /* 青い立方体モンスター */
-        #monster {
-            position: absolute; width: 300px; height: 450px;
-            transform-style: preserve-3d;
-            transform: translate3d(-150px, -400px, -2000px);
-        }
-        .monster-body {
-            position: absolute; width: 300px; height: 450px;
-            background: #001a4d; border: 10px solid var(--blue);
-            box-shadow: 0 0 50px var(--blue);
-            display: flex; align-items: center; justify-content: center; font-size: 150px;
-        }
-
-        /* 電導ギミック */
-        .core {
-            position: absolute; width: 120px; height: 250px;
-            background: #222; border: 5px solid #444;
-            transform-style: preserve-3d;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-        }
-        .core.active { border-color: var(--neon); box-shadow: 0 0 40px var(--neon); color: var(--neon); }
-
-        /* グラブパックUI（一人称固定） */
-        .hud { position: fixed; inset: 0; pointer-events: none; z-index: 1000; }
-        .hand {
-            position: absolute; bottom: -50px; width: 180px; height: 150px;
-            transform-style: preserve-3d; transition: transform 0.2s ease-out;
-        }
-        #hand-l { left: 10%; }
-        #hand-r { right: 10%; }
-        .hand-cube { width: 120px; height: 100px; border: 3px solid rgba(255,255,255,0.5); }
-
-        #wire-l, #wire-r {
-            position: absolute; bottom: 80px; width: 6px; height: 0;
-            transform-origin: bottom center; transition: height 0.2s ease-out;
-        }
-
-        #info { position: fixed; top: 30px; width: 100%; text-align: center; text-shadow: 0 0 5px #000; }
     </style>
 </head>
 <body>
-
-<div id="info">
-    <div style="font-size: 12px; color: #555;">PLAYTIME CO. ENGINE v3.0</div>
-    <h1 id="status">STABLE</h1>
-    <p>WASD: MOVE | ARROWS: ROTATE | F, G: GRAB | R: RESET</p>
-</div>
-
-<div id="viewport">
-    <div id="camera">
-        <!-- 3Dワールド -->
-        <div class="plane floor"></div>
-        <div class="plane wall wall-left"></div>
-        <div class="plane wall wall-right"></div>
-        
-        <!-- ギミック -->
-        <div id="core-l" class="core" style="transform: translate3d(-700px, -150px, -1500px);">POW</div>
-        <div id="core-r" class="core" style="transform: translate3d(700px, -150px, -1500px);">SW</div>
-
-        <!-- 巨大青立方体 -->
-        <div id="monster">
-            <div class="monster-body">👁️</div>
-        </div>
+    <div id="ui">
+        <h1>RECYCLE PANIC: Prototype</h1>
+        <p>BATTERY: <span id="battery">100</span>%</p>
+        <p>[WASD] Move | [Mouse] Look</p>
     </div>
-</div>
 
-<!-- 固定GrabPack -->
-<div class="hud">
-    <div id="hand-l" class="hand">
-        <div id="wire-l" style="background: var(--blue); left: 60px;"></div>
-        <div class="hand-cube" style="background: var(--blue);"></div>
-    </div>
-    <div id="hand-r" class="hand">
-        <div id="wire-r" style="background: var(--red); right: 60px;"></div>
-        <div class="hand-cube" style="background: var(--red);"></div>
-    </div>
-</div>
-
-<script>
-    const camera = document.getElementById('camera');
-    const monster = document.getElementById('monster');
-    const status = document.getElementById('status');
-    const handL = document.getElementById('hand-l');
-    const handR = document.getElementById('hand-r');
-    const wireL = document.getElementById('wire-l');
-    const wireR = document.getElementById('wire-r');
-
-    // プレイヤーの物理変数
-    let pX = 0, pY = 0, pZ = 0;
-    let rY = 0; // 視点の左右回転
-    let mZ = -2000; // モンスターの初期位置
-    let isL = false, isR = false;
-    let gameOver = false;
-
-    const keys = {};
-    window.onkeydown = e => {
-        keys[e.code] = true;
-        if(gameOver) return;
-        if(e.code === 'KeyF') shoot('L');
-        if(e.code === 'KeyG') shoot('R');
-        if(e.code === 'KeyR') reset();
-    };
-    window.onkeyup = e => keys[e.code] = false;
-
-    function shoot(side) {
-        const hand = side === 'L' ? handL : handR;
-        const wire = side === 'L' ? wireL : wireR;
-        const core = document.getElementById(side === 'L' ? 'core-l' : 'core-r');
-        
-        hand.style.transform = "translateZ(-1200px) translateY(-300px) rotateX(360deg)";
-        wire.style.height = "1200px";
-        wire.style.transform = "rotateX(-35deg)";
-
-        setTimeout(() => {
-            // 簡易当たり判定：特定の回転角度かつ近くにいるか
-            if(Math.abs(rY - (side === 'L' ? 25 : -25)) < 15 && Math.abs(pZ - (-1000)) < 800) {
-                if(side === 'L') isL = true; else isR = true;
-                core.classList.add('active');
-                if(isL && isR) {
-                    status.innerText = "CIRCUIT CONNECTED!";
-                    status.style.color = "var(--neon)";
-                    mZ -= 1000; // モンスターを押し戻す
-                }
-            } else {
-                setTimeout(() => {
-                    if(!(side === 'L' ? isL : isR)) {
-                        hand.style.transform = ""; wire.style.height = "0";
-                    }
-                }, 200);
+    <!-- Three.jsのCDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
             }
-        }, 200);
-    }
+        }
+    </script>
 
-    function reset() {
-        isL = isR = false;
-        handL.style.transform = handR.style.transform = "";
-        wireL.style.height = wireR.style.height = "0";
-        document.querySelectorAll('.core').forEach(c => c.classList.remove('active'));
-        status.innerText = "STABLE"; status.style.color = "#fff";
-    }
+    <script type="module">
+        import * as THREE from 'three';
 
-    function loop() {
-        if(gameOver) return;
+        // --- シーン設定 ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x000000, 1, 15); // 霧で奥を見えなくする
 
-        // 視点回転（矢印キー）
-        if(keys['ArrowLeft']) rY += 2.5;
-        if(keys['ArrowRight']) rY -= 2.5;
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
-        // 移動（WASD）- 回転角度に合わせて進む方向を計算
-        const speed = 15;
-        const rad = rY * Math.PI / 180;
-        if(keys['KeyW']) { pX += Math.sin(rad) * speed; pZ += Math.cos(rad) * speed; }
-        if(keys['KeyS']) { pX -= Math.sin(rad) * speed; pZ -= Math.cos(rad) * speed; }
-        if(keys['KeyA']) { pX += Math.cos(rad) * speed; pZ -= Math.sin(rad) * speed; }
-        if(keys['KeyD']) { pX -= Math.cos(rad) * speed; pZ += Math.sin(rad) * speed; }
+        // --- ライティング (懐中電灯) ---
+        const flashlight = new THREE.SpotLight(0xffffff, 5);
+        flashlight.angle = Math.PI / 6;
+        flashlight.penumbra = 0.3;
+        flashlight.castShadow = true;
+        flashlight.distance = 20;
+        camera.add(flashlight);
+        flashlight.position.set(0, 0, 1);
+        flashlight.target = new THREE.Object3D();
+        camera.add(flashlight.target);
+        flashlight.target.position.set(0, 0, -1);
+        scene.add(camera);
 
-        // カメラ適用
-        camera.style.transform = `rotateY(${rY}deg) translate3d(${pX}px, 0, ${pZ}px)`;
+        const ambient = new THREE.AmbientLight(0x111111); // 微かな環境光
+        scene.add(ambient);
 
-        // モンスターの挙動
-        mZ += 4;
-        monster.style.transform = `translate3d(-150px, -400px, ${mZ}px)`;
+        // --- 地面と壁 (廃墟風) ---
+        const textureLoader = new THREE.TextureLoader();
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        
+        // 地面
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(100, 100),
+            new THREE.MeshStandardMaterial({ color: 0x222222 })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
 
-        if(mZ > -250) {
-            gameOver = true;
-            status.innerText = "FATAL ERROR: COLLISION";
-            document.body.style.background = "#300";
+        // 障害物（ジャンク山）
+        for(let i=0; i<50; i++) {
+            const wall = new THREE.Mesh(
+                geometry,
+                new THREE.MeshStandardMaterial({ color: Math.random() * 0x555555 })
+            );
+            wall.position.set(Math.random()*40-20, 0.5, Math.random()*40-20);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            scene.add(wall);
         }
 
-        requestAnimationFrame(loop);
-    }
-    loop();
-</script>
+        // --- 敵 (不気味な赤い立方体) ---
+        const enemy = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 1.8, 0.8),
+            new THREE.MeshStandardMaterial({ color: 0xff0000 })
+        );
+        enemy.position.set(0, 0.9, -10);
+        scene.add(enemy);
+
+        // --- 操作系 ---
+        let move = { fwd: false, bwd: false, lft: false, rgt: false };
+        document.addEventListener('keydown', (e) => {
+            if(e.code === 'KeyW') move.fwd = true;
+            if(e.code === 'KeyS') move.bwd = true;
+            if(e.code === 'KeyA') move.lft = true;
+            if(e.code === 'KeyD') move.rgt = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.code === 'KeyW') move.fwd = false;
+            if(e.code === 'KeyS') move.bwd = false;
+            if(e.code === 'KeyA') move.lft = false;
+            if(e.code === 'KeyD') move.rgt = false;
+        });
+
+        // マウスによる視点移動（クリックでロック）
+        document.body.addEventListener('click', () => {
+            document.body.requestPointerLock();
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === document.body) {
+                camera.rotation.y -= e.movementX * 0.002;
+                camera.rotation.x -= e.movementY * 0.002;
+            }
+        });
+
+        camera.position.y = 1.6; // 目線の高さ
+
+        // --- 更新ループ ---
+        let battery = 100;
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 移動処理
+            const speed = 0.1;
+            if(move.fwd) camera.translateZ(-speed);
+            if(move.bwd) camera.translateZ(speed);
+            if(move.lft) camera.translateX(-speed);
+            if(move.rgt) camera.translateX(speed);
+            camera.position.y = 1.6; // 高さを固定
+
+            // バッテリー消費
+            if(battery > 0) {
+                battery -= 0.01;
+                document.getElementById('battery').innerText = Math.floor(battery);
+                flashlight.intensity = (battery / 100) * 5;
+            }
+
+            // 敵の単純な追跡（恐怖演出）
+            const dist = camera.position.distanceTo(enemy.position);
+            if(dist < 15) {
+                enemy.lookAt(camera.position.x, 0.9, camera.position.z);
+                enemy.translateZ(0.02);
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // リサイズ対応
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
