@@ -141,7 +141,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const scene = new THREE.Scene();
 
-scene.fog = new THREE.Fog(0x000000, 2, 18);
+scene.fog = new THREE.Fog(0x000000, 2, 22);
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -162,10 +162,10 @@ renderer.setClearColor(0x000000);
 
 document.body.appendChild(renderer.domElement);
 
-const ambient = new THREE.AmbientLight(0x111111,0.08);
+const ambient = new THREE.AmbientLight(0x222222,0.22);
 scene.add(ambient);
 
-const moon = new THREE.DirectionalLight(0x88aaff,0.08);
+const moon = new THREE.DirectionalLight(0x88aaff,0.18);
 moon.position.set(10,20,10);
 moon.castShadow = true;
 scene.add(moon);
@@ -175,10 +175,10 @@ const flashlight = new THREE.SpotLight(
     0
 );
 
-flashlight.angle = 0.55;
-flashlight.penumbra = 0.45;
-flashlight.distance = 42;
-flashlight.decay = 1.2;
+flashlight.angle = 0.75;
+flashlight.penumbra = 0.7;
+flashlight.distance = 55;
+flashlight.decay = 1;
 flashlight.castShadow = true;
 
 scene.add(flashlight);
@@ -245,8 +245,8 @@ function createLamp(x,z){
 
     const light = new THREE.PointLight(
         0xffaa66,
-        0.3,
-        5
+        0.5,
+        6
     );
 
     light.position.set(x,4.5,z);
@@ -432,7 +432,7 @@ function interact(){
 
         powerOn = true;
 
-        moon.intensity = 0.25;
+        moon.intensity = 0.35;
 
         showMessage("中央電源を復旧した");
 
@@ -513,19 +513,19 @@ function animate(){
         stamina + "%";
 
     if(keys["ArrowLeft"]){
-        yaw += 1.8 * delta;
+        yaw += 1.5 * delta;
     }
 
     if(keys["ArrowRight"]){
-        yaw -= 1.8 * delta;
+        yaw -= 1.5 * delta;
     }
 
     if(keys["ArrowUp"]){
-        pitch += 1.5 * delta;
+        pitch += 1.2 * delta;
     }
 
     if(keys["ArrowDown"]){
-        pitch -= 1.5 * delta;
+        pitch -= 1.2 * delta;
     }
 
     pitch = Math.max(-1.2,Math.min(1.2,pitch));
@@ -535,15 +535,15 @@ function animate(){
     camera.rotation.x = pitch;
 
     const forward = new THREE.Vector3(
-        Math.sin(yaw),
+        -Math.sin(yaw),
         0,
-        Math.cos(yaw)
+        -Math.cos(yaw)
     );
 
     const right = new THREE.Vector3(
-        forward.z,
+        -forward.z,
         0,
-        -forward.x
+        forward.x
     );
 
     const oldPosition = camera.position.clone();
@@ -552,7 +552,7 @@ function animate(){
 
         camera.position.addScaledVector(
             forward,
-            -moveSpeed * delta
+            moveSpeed * delta
         );
     }
 
@@ -560,7 +560,7 @@ function animate(){
 
         camera.position.addScaledVector(
             forward,
-            moveSpeed * delta
+            -moveSpeed * delta
         );
     }
 
@@ -568,7 +568,7 @@ function animate(){
 
         camera.position.addScaledVector(
             right,
-            moveSpeed * delta
+            -moveSpeed * delta
         );
     }
 
@@ -576,7 +576,7 @@ function animate(){
 
         camera.position.addScaledVector(
             right,
-            -moveSpeed * delta
+            moveSpeed * delta
         );
     }
 
