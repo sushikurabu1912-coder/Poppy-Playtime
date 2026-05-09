@@ -2,26 +2,27 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>3D Exploration - Brighter Version</title>
+    <title>3D Spatial Prototype</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #333; font-family: 'Courier New', monospace; }
+        body { margin: 0; overflow: hidden; background-color: #222; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #ui {
             position: absolute; top: 20px; left: 20px;
-            color: #fff; text-shadow: 2px 2px 2px #000; pointer-events: none;
-            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+            color: #fff; text-shadow: 2px 2px 5px #000; pointer-events: none;
+            background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px;
+            border-left: 5px solid #f00;
         }
-        .status { font-size: 1.2em; margin-bottom: 5px; }
-        #msg { color: #aaa; margin-top: 10px; font-size: 0.9em;}
+        .status { font-size: 1.1em; margin-bottom: 5px; font-weight: bold; }
+        #battery-bar { width: 100px; height: 10px; background: #444; display: inline-block; }
+        #battery-fill { height: 100%; background: #0f0; width: 100%; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div class="status">BATTERY: <span id="battery">100</span>%</div>
-        <div class="status">LIGHT: <span id="light-status">ON</span></div>
-        <div id="msg">
-            [WASD] Move<br>
-            [Arrows / IJKL] Look Around<br>
-            [Space] Toggle Flashlight
+        <div class="status">ENERGY</div>
+        <div id="battery-bar"><div id="battery-fill"></div></div>
+        <div id="msg" style="margin-top:10px; font-size: 0.8em; color: #ccc;">
+            [WASD] Walk | [Arrows/IJKL] Look<br>
+            [Space] Flashlight ON/OFF
         </div>
     </div>
 
@@ -36,110 +37,109 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- シーン・カメラ設定 ---
+        // --- 基本設定 ---
         const scene = new THREE.Scene();
-        
-        // 【変更点1】霧を薄く、遠くへ (黒からグレーへ、範囲を18→40へ)
-        scene.fog = new THREE.Fog(0x333333, 10, 40); 
-        scene.background = new THREE.Color(0x333333); // 背景色もグレーに
+        scene.background = new THREE.Color(0x222222);
+        scene.fog = new THREE.Fog(0x222222, 5, 45);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // 影を有効化
         document.body.appendChild(renderer.domElement);
 
-        // --- 懐中電灯 (SpotLight) ---
-        const flashlight = new THREE.SpotLight(0xffffff, 10, 30, Math.PI / 6, 0.3); // 光を強く、遠くまで
-        flashlight.position.set(0, 0, 0.1);
+        // --- 照明 ---
+        const ambient = new THREE.AmbientLight(0x404040, 1.5); // 全体を底上げ
+        scene.add(ambient);
+
+        const flashlight = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 5, 0.5);
+        flashlight.castShadow = true;
+        flashlight.shadow.mapSize.width = 1024;
+        flashlight.shadow.mapSize.height = 1024;
         camera.add(flashlight);
         flashlight.target.position.set(0, 0, -1);
         camera.add(flashlight.target);
         scene.add(camera);
 
-        // 【変更点2】環境光を大幅に強化 (0x050505 -> 0x666666)
-        // これにより、ライトがなくても全体が見えるようになります
-        const ambient = new THREE.AmbientLight(0x666666); 
-        scene.add(ambient);
+        // --- 地面 (グリッド付き) ---
+        // グリッドヘルパーを重ねることで立体的な距離感を出す
+        const grid = new THREE.GridHelper(100, 50, 0x444444, 0x333333);
+        grid.position.y = 0.01;
+        scene.add(grid);
 
-        // --- 地面と障害物 ---
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(100, 100),
-            new THREE.MeshStandardMaterial({ color: 0x999999 }) // 地面を明るく
-        );
+        const floorGeo = new THREE.PlaneGeometry(100, 100);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true; // 影を受ける
         scene.add(floor);
 
-        for(let i=0; i<60; i++) {
-            const box = new THREE.Mesh(
-                new THREE.BoxGeometry(1, Math.random()*3, 1),
-                // 【変更点3】障害物の色を明るく (0x333333 -> 0xcccccc)
-                new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5 }) 
-            );
-            box.position.set(Math.random()*40-20, box.geometry.parameters.height/2, Math.random()*40-20);
-            scene.add(box);
+        // --- 立体的な壁の配置 ---
+        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x777777 });
+        
+        function createWall(w, h, d, x, z) {
+            const geo = new THREE.BoxGeometry(w, h, d);
+            const mesh = new THREE.Mesh(geo, wallMaterial);
+            mesh.position.set(x, h/2, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
         }
 
-        // --- 敵 (見えやすくするために少し明るい赤に) ---
-        const enemy = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 2, 0.8),
-            new THREE.MeshStandardMaterial({ color: 0xff3333 })
-        );
-        enemy.position.set(5, 1, -15); // 少し遠くに配置
-        scene.add(enemy);
+        // 迷路のように壁をランダム配置
+        for(let i=0; i<40; i++) {
+            const w = Math.random() > 0.5 ? 4 : 1;
+            const d = w === 1 ? 4 : 1;
+            createWall(w, 2.5, d, Math.random()*60-30, Math.random()*60-30);
+        }
 
-        // --- キーボード入力管理 ---
+        // --- 敵 (より不気味な形に) ---
+        const enemyGroup = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2, 0.5), new THREE.MeshStandardMaterial({color: 0xff0000}));
+        const eye = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.2, 0.1), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xff0000}));
+        eye.position.set(0, 0.7, -0.3);
+        enemyGroup.add(body, eye);
+        enemyGroup.position.set(10, 0, -15);
+        scene.add(enemyGroup);
+
+        // --- 入力とループ ---
         const keys = {};
         let battery = 100;
         let lightOn = true;
 
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if(e.code === 'Space') {
-                lightOn = !lightOn;
-                document.getElementById('light-status').innerText = lightOn ? "ON" : "OFF";
-            }
+            if(e.code === 'Space') lightOn = !lightOn;
         });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        camera.position.y = 1.6;
-
-        // --- メインループ ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // 1. 移動 (WASD)
-            const moveSpeed = 0.1; // 少し速く
-            if(keys['KeyW']) camera.translateZ(-moveSpeed);
-            if(keys['KeyS']) camera.translateZ(moveSpeed);
-            if(keys['KeyA']) camera.translateX(-moveSpeed);
-            if(keys['KeyD']) camera.translateX(moveSpeed);
+            // 移動と回転
+            if(keys['KeyW']) camera.translateZ(-0.12);
+            if(keys['KeyS']) camera.translateZ(0.12);
+            if(keys['KeyA']) camera.translateX(-0.12);
+            if(keys['KeyD']) camera.translateX(0.12);
+            if(keys['ArrowLeft'] || keys['KeyJ']) camera.rotation.y += 0.04;
+            if(keys['ArrowRight'] || keys['KeyL']) camera.rotation.y -= 0.04;
+            if(keys['ArrowUp'] || keys['KeyI']) camera.rotation.x += 0.03;
+            if(keys['ArrowDown'] || keys['KeyK']) camera.rotation.x -= 0.03;
 
-            // 2. 視点回転 (IJKL または 方向キー)
-            const rotSpeed = 0.03;
-            if(keys['KeyI'] || keys['ArrowUp'])    camera.rotation.x += rotSpeed;
-            if(keys['KeyK'] || keys['ArrowDown'])  camera.rotation.x -= rotSpeed;
-            if(keys['KeyJ'] || keys['ArrowLeft'])  camera.rotation.y += rotSpeed;
-            if(keys['KeyL'] || keys['ArrowRight']) camera.rotation.y -= rotSpeed;
-            
-            camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, camera.rotation.x));
             camera.position.y = 1.6;
+            camera.rotation.x = Math.max(-0.8, Math.min(0.8, camera.rotation.x));
 
-            // 3. バッテリーとライトの処理 (減りを遅く)
-            if(lightOn && battery > 0) {
-                battery -= 0.01; 
-                flashlight.intensity = 10;
-            } else {
-                flashlight.intensity = 0;
-            }
-            document.getElementById('battery').innerText = Math.max(0, Math.floor(battery));
+            // ライトとUI
+            flashlight.intensity = lightOn && battery > 0 ? 25 : 0;
+            if(lightOn && battery > 0) battery -= 0.02;
+            document.getElementById('battery-fill').style.width = battery + "%";
+            if(battery < 20) document.getElementById('battery-fill').style.background = "#f00";
 
-            // 4. 敵の挙動（明るいので検知範囲を固定）
-            const dist = camera.position.distanceTo(enemy.position);
-            const detectRange = 20; 
-            
-            if(dist < detectRange) {
-                enemy.lookAt(camera.position.x, 1, camera.position.z);
-                enemy.translateZ(0.04); // 少し速く
+            // 敵の追尾
+            const dist = camera.position.distanceTo(enemyGroup.position);
+            if(dist < 25) {
+                enemyGroup.lookAt(camera.position.x, 0, camera.position.z);
+                enemyGroup.translateZ(0.05);
             }
 
             renderer.render(scene, camera);
