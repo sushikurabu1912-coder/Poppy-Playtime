@@ -114,7 +114,8 @@ canvas{
         ② ゲームコーナー電源<br>
         ③ 中央ブレーカー<br><br>
 
-        最後に管理室へ向かう。<br><br>
+        最後に「EXIT」看板のある<br>
+        管理室へ向かう。<br><br>
 
         WASD : 移動<br>
         SHIFT : ダッシュ<br>
@@ -198,6 +199,7 @@ const floor = new THREE.Mesh(
 
 floor.rotation.x = -Math.PI/2;
 floor.receiveShadow = true;
+
 scene.add(floor);
 
 const colliders = [];
@@ -232,7 +234,35 @@ createWall(0,2,20,40,4,1);
 
 createWall(-11,2,-4,8,4,8,0x181818);
 createWall(11,2,-5,8,4,8,0x181818);
-createWall(0,2,8,12,4,6,0x181818);
+
+const managerRoom = new THREE.Mesh(
+    new THREE.BoxGeometry(12,5,8),
+    new THREE.MeshStandardMaterial({
+        color:0x1b1b1b
+    })
+);
+
+managerRoom.position.set(0,2.5,8);
+
+managerRoom.castShadow = true;
+managerRoom.receiveShadow = true;
+
+scene.add(managerRoom);
+
+const exitSign = new THREE.Mesh(
+    new THREE.BoxGeometry(3,0.8,0.2),
+    new THREE.MeshBasicMaterial({
+        color:0x00ff66
+    })
+);
+
+exitSign.position.set(0,4.5,4);
+
+scene.add(exitSign);
+
+const doorFrameLeft = createWall(-2.5,2,4,1,4,1,0x101010);
+const doorFrameRight = createWall(2.5,2,4,1,4,1,0x101010);
+const doorTop = createWall(0,4,4,4,1,1,0x101010);
 
 function createLamp(x,z){
 
@@ -372,13 +402,15 @@ const arcadeSwitch = createSwitch(13,-10,0x4444ff);
 const mainBreaker = createSwitch(14,10,0x00ffcc);
 
 const door = new THREE.Mesh(
-    new THREE.BoxGeometry(4,4,0.5),
+    new THREE.BoxGeometry(3,4,0.3),
     new THREE.MeshStandardMaterial({
-        color:0x333333
+        color:0x555555
     })
 );
 
-door.position.set(0,2,5);
+door.position.set(0,2,4);
+
+door.castShadow = true;
 
 scene.add(door);
 
@@ -441,7 +473,7 @@ function updateObjective(){
     ゲームコーナー : ${arcadeOn ? "ON" : "OFF"}<br>
     中央ブレーカー : ${breakerOn ? "ON" : "OFF"}<br><br>
 
-    ${gameCompleted ? "管理室へ向かう" : "全ての電源を復旧する"}<br><br>
+    ${gameCompleted ? "EXIT看板の管理室へ向かう" : "全ての電源を復旧する"}<br><br>
 
     WASD : 移動<br>
     SHIFT : ダッシュ<br>
@@ -500,12 +532,11 @@ function interact(){
         },3000);
     }
 
-    if(distance(camera,door) < 3 && gameCompleted){
+    if(distance(camera,door) < 4 && gameCompleted){
 
         document.getElementById("fade").style.opacity = 1;
 
         showMessage("CHAPTER 1 CLEAR");
-
     }
 
     updateObjective();
