@@ -2,155 +2,176 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Poppy Playtime - Cube Monster Edition</title>
+    <title>Poppy Playtime: Electricity Puzzle</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; }
+        :root { --blue: #0088ff; --red: #ff3300; --gold: #ffd700; }
+        body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         
-        #viewport {
-            perspective: 800px;
-            width: 100vw; height: 100vh;
-            display: flex; align-items: center; justify-content: center;
-            background: radial-gradient(circle, #111 0%, #000 100%);
-        }
+        #game-container { width: 100vw; height: 100vh; perspective: 1000px; background: radial-gradient(circle at center, #111, #000); }
+        
+        #world { position: absolute; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.1s linear; }
 
-        #world {
-            position: relative;
-            width: 0; height: 0;
-            transform-style: preserve-3d;
-            transition: transform 0.1s linear;
-        }
+        /* 3D通路 */
+        .wall { position: absolute; background: #151515; border: 1px solid #222; }
+        .floor { width: 2000px; height: 4000px; transform: rotateX(90deg) translate(-50%, -50%) translateZ(-300px); 
+                 background-image: repeating-linear-gradient(#111 0 5px, transparent 5px 100px), repeating-linear-gradient(90deg, #111 0 5px, transparent 5px 100px); }
 
-        /* 3D構造の共通設定 */
-        .cube-base { position: absolute; transform-style: preserve-3d; }
-        .face { position: absolute; border: 1px solid rgba(255,255,255,0.2); box-sizing: border-box; }
+        /* 電源ソケット（ギミック） */
+        .socket { position: absolute; width: 100px; height: 100px; background: #222; border: 4px solid #444; 
+                  display: flex; align-items: center; justify-content: center; font-size: 40px; transform-style: preserve-3d; }
+        #power-source { transform: translate3d(-600px, -150px, -1200px); border-color: var(--blue); }
+        #door-switch { transform: translate3d(500px, -150px, -1200px); border-color: var(--red); }
+        .charged { border-color: var(--gold) !important; box-shadow: 0 0 30px var(--gold); background: #332b00; }
 
-        /* 通路 */
-        .floor { width: 1000px; height: 3000px; transform: rotateX(90deg) translate(-500px, -1500px) translateZ(-200px); background: repeating-linear-gradient(#222 0 2px, transparent 2px 100px), repeating-linear-gradient(90deg, #222 0 2px, transparent 2px 100px); }
+        /* 青いモンスター立方体 */
+        #monster { position: absolute; width: 250px; height: 400px; transform: translate3d(-125px, -350px, -2000px); transform-style: preserve-3d; }
+        .m-face { position: absolute; width: 250px; height: 400px; background: #001a4d; border: 4px solid #00f; }
 
-        /* 巨大な青い立方体モンスター (旧ハギー) */
-        #monster-cube {
-            width: 200px; height: 200px;
-            transform: translate3d(-100px, -250px, -1500px);
-        }
-        .monster-face { width: 200px; height: 200px; background: rgba(0, 50, 200, 0.9); border: 4px solid #00f; display: flex; align-items: center; justify-content: center; font-size: 80px; }
+        /* グラブパックUI */
+        .hand-anchor { position: absolute; bottom: 0; width: 120px; height: 120px; z-index: 100; transform-style: preserve-3d; }
+        #anchor-l { left: 10%; }
+        #anchor-r { right: 10%; }
+        
+        .hand-box { width: 100px; height: 80px; position: relative; transform-style: preserve-3d; transition: transform 0.3s cubic-bezier(0.17, 0.67, 0.61, 1.3); }
+        .h-face { position: absolute; width: 100px; height: 80px; border: 2px solid rgba(255,255,255,0.5); }
+        
+        .wire { position: absolute; bottom: 60px; left: 50px; width: 6px; height: 0; transform-origin: bottom center; z-index: 90; }
 
-        /* グラブパック立方体 (手前) */
-        .hand-cube { position: absolute; width: 80px; height: 80px; transform-style: preserve-3d; bottom: 50px; transition: transform 0.15s ease-out; }
-        #cube-l { left: 20%; transform: rotateX(-10deg) rotateY(20deg) translateZ(100px); }
-        #cube-r { right: 20%; transform: rotateX(-10deg) rotateY(-20deg) translateZ(100px); }
-        .hand-face { width: 80px; height: 80px; opacity: 0.8; border: 2px solid #fff; }
-
-        /* 立方体の面配置用汎用クラス */
-        .f-front  { transform: translateZ(var(--z)); }
-        .f-back   { transform: rotateY(180deg) translateZ(var(--z)); }
-        .f-top    { transform: rotateX(90deg) translateZ(var(--z)); }
-        .f-bottom { transform: rotateX(-90deg) translateZ(var(--z)); }
-        .f-left   { transform: rotateY(-90deg) translateZ(var(--z)); }
-        .f-right  { transform: rotateY(90deg) translateZ(var(--z)); }
-
-        #ui { position: fixed; top: 20px; width: 100%; text-align: center; }
+        #hud { position: fixed; top: 20px; width: 100%; text-align: center; pointer-events: none; text-shadow: 0 0 10px #000; }
+        #glitch { position: fixed; inset: 0; background: rgba(255,255,255,0.1); display: none; pointer-events: none; z-index: 200; }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    <h1>CUBE MONSTER SURVIVAL</h1>
-    <p>ROTATE: [←][→] | LAUNCH: [A] (Blue) [D] (Red)</p>
-    <h2 id="status" style="color: #0f0;">CORE STABLE</h2>
+<div id="glitch"></div>
+<div id="hud">
+    <div style="color: #666; font-size: 12px;">FACILITY POWER STATUS: <span id="p-status">OFF</span></div>
+    <h1 id="msg">CONNECT THE CIRCUIT</h1>
+    <p>[A] LEFT HAND | [D] RIGHT HAND | [S] RESET | [←][→] LOOK</p>
 </div>
 
-<div id="viewport">
+<div id="game-container">
     <div id="world">
-        <div class="floor"></div>
+        <div class="wall floor"></div>
+        <div id="power-source" class="socket">🔵</div>
+        <div id="door-switch" class="socket">🔴</div>
         
-        <!-- モンスター立方体 -->
-        <div id="monster-cube" class="cube-base">
-            <div class="face monster-face f-front" style="--z: 100px;">👁️👁️</div>
-            <div class="face monster-face f-back"  style="--z: 100px;"></div>
-            <div class="face monster-face f-top"   style="--z: 100px;"></div>
-            <div class="face monster-face f-bottom" style="--z: 100px;"></div>
-            <div class="face monster-face f-left"  style="--z: 100px;"></div>
-            <div class="face monster-face f-right" style="--z: 100px;"></div>
+        <div id="monster">
+            <div class="m-face" style="transform: translateZ(50px); display: flex; align-items: center; justify-content: center; font-size: 100px;">👁️</div>
+            <div class="m-face" style="transform: rotateY(180deg) translateZ(50px);"></div>
         </div>
     </div>
 </div>
 
-<!-- プレイヤーの手 -->
-<div id="cube-l" class="hand-cube">
-    <div class="cube-base">
-        <div class="face hand-face f-front" style="background:#05f; --z:40px;"></div>
-        <div class="face hand-face f-back"  style="background:#05f; --z:40px;"></div>
-        <div class="face hand-face f-top"   style="background:#05f; --z:40px;"></div>
-        <div class="face hand-face f-bottom" style="background:#05f; --z:40px;"></div>
-        <div class="face hand-face f-left"  style="background:#05f; --z:40px;"></div>
-        <div class="face hand-face f-right" style="background:#05f; --z:40px;"></div>
+<!-- GrabPack Hands -->
+<div id="anchor-l" class="hand-anchor">
+    <div id="wire-l" class="wire" style="background: var(--blue);"></div>
+    <div id="hand-l" class="hand-box">
+        <div class="h-face" style="background: var(--blue); transform: translateZ(20px);"></div>
+        <div class="h-face" style="background: var(--blue); transform: rotateY(180deg) translateZ(20px);"></div>
     </div>
 </div>
 
-<div id="cube-r" class="hand-cube">
-    <div class="cube-base">
-        <div class="face hand-face f-front" style="background:#f20; --z:40px;"></div>
-        <div class="face hand-face f-back"  style="background:#f20; --z:40px;"></div>
-        <div class="face hand-face f-top"   style="background:#f20; --z:40px;"></div>
-        <div class="face hand-face f-bottom" style="background:#f20; --z:40px;"></div>
-        <div class="face hand-face f-left"  style="background:#f20; --z:40px;"></div>
-        <div class="face hand-face f-right" style="background:#f20; --z:40px;"></div>
+<div id="anchor-r" class="hand-anchor">
+    <div id="wire-r" class="wire" style="background: var(--red);"></div>
+    <div id="hand-r" class="hand-box">
+        <div class="h-face" style="background: var(--red); transform: translateZ(20px);"></div>
+        <div class="h-face" style="background: var(--red); transform: rotateY(180deg) translateZ(20px);"></div>
     </div>
 </div>
 
 <script>
     const world = document.getElementById('world');
-    const monster = document.getElementById('monster-cube');
-    const status = document.getElementById('status');
-    const cubeL = document.getElementById('cube-l');
-    const cubeR = document.getElementById('cube-r');
+    const handL = document.getElementById('hand-l');
+    const handR = document.getElementById('hand-r');
+    const wireL = document.getElementById('wire-l');
+    const wireR = document.getElementById('wire-r');
+    const monster = document.getElementById('monster');
+    const glitch = document.getElementById('glitch');
 
     let rotY = 0;
-    let monsterZ = -1500;
+    let monsterZ = -2000;
+    let lAttached = false, rAttached = false;
     let gameOver = false;
     const keys = {};
 
     window.addEventListener('keydown', e => {
         keys[e.code] = true;
-        if (!gameOver) {
-            if (e.code === 'KeyA') shoot(cubeL, 'L');
-            if (e.code === 'KeyD') shoot(cubeR, 'R');
-        }
+        if(gameOver) return;
+        if(e.code === 'KeyA') attachHand('L');
+        if(e.code === 'KeyD') attachHand('R');
+        if(e.code === 'KeyS') resetHands();
     });
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    function shoot(cube, side) {
-        const original = cube.style.transform;
-        cube.style.transform += " translateZ(-1000px) rotateX(360deg)";
+    function attachHand(side) {
+        const hand = side === 'L' ? handL : handR;
+        const wire = side === 'L' ? wireL : wireR;
+        const target = side === 'L' ? document.getElementById('power-source') : document.getElementById('door-switch');
         
+        // 射出
+        hand.style.transform = "translate3d(0, -400px, -1200px) rotateX(360deg)";
+        wire.style.height = "1200px";
+        wire.style.transform = "rotateX(-30deg)";
+
         setTimeout(() => {
-            // モンスターが正面にいるときに撃てばノックバック
-            // モンスターは中央付近にいるので、視点が中央（rotY=0付近）ならヒット
-            if (Math.abs(rotY) < 15) {
-                monsterZ -= 300;
-                status.innerText = "CRITICAL REJECTION";
-                status.style.color = "#fff";
-                setTimeout(() => { status.innerText = "CORE STABLE"; status.style.color = "#0f0"; }, 500);
+            // 当たり判定
+            const hit = (side === 'L' && rotY > 20 && rotY < 40) || (side === 'R' && rotY < -20 && rotY > -40);
+            if(hit) {
+                if(side === 'L') lAttached = true; else rAttached = true;
+                target.classList.add('charged');
+                checkCircuit();
+            } else {
+                setTimeout(() => {
+                    if(!(side === 'L' ? lAttached : rAttached)) resetHand(side);
+                }, 200);
             }
-            setTimeout(() => { cube.style.transform = original; }, 200);
-        }, 150);
+        }, 300);
+    }
+
+    function checkCircuit() {
+        if(lAttached && rAttached) {
+            document.getElementById('p-status').innerText = "CONNECTED";
+            document.getElementById('p-status').style.color = "var(--gold)";
+            document.getElementById('msg').innerText = "CIRCUIT COMPLETE - REPELLING";
+            monsterZ -= 1000; // 電気が流れてモンスターが逃げる
+        }
+    }
+
+    function resetHands() {
+        resetHand('L'); resetHand('R');
+        lAttached = rAttached = false;
+        document.querySelectorAll('.socket').forEach(s => s.classList.remove('charged'));
+        document.getElementById('p-status').innerText = "OFF";
+        document.getElementById('p-status').style.color = "#666";
+    }
+
+    function resetHand(side) {
+        const hand = side === 'L' ? handL : handR;
+        const wire = side === 'L' ? wireL : wireR;
+        hand.style.transform = "translate3d(0,0,0)";
+        wire.style.height = "0";
     }
 
     function update() {
-        if (gameOver) return;
+        if(gameOver) return;
 
-        if (keys['ArrowLeft']) rotY += 2;
-        if (keys['ArrowRight']) rotY -= 2;
+        if(keys['ArrowLeft']) rotY += 2;
+        if(keys['ArrowRight']) rotY -= 2;
         rotY = Math.max(Math.min(rotY, 50), -50);
         world.style.transform = `rotateY(${rotY}deg)`;
 
-        monsterZ += 4;
-        monster.style.transform = `translate3d(-100px, -250px, ${monsterZ}px)`;
+        monsterZ += (lAttached && rAttached) ? 1 : 4; // 通電中は進みが遅くなる
+        monster.style.transform = `translate3d(-125px, -350px, ${monsterZ}px)`;
 
-        if (monsterZ > -300) {
+        // 接近演出
+        if(monsterZ > -800) {
+            glitch.style.display = Math.random() > 0.8 ? 'block' : 'none';
+        }
+
+        if(monsterZ > -300) {
             gameOver = true;
-            status.innerText = "CONNECTION LOST - CUBE BREACH";
-            status.style.color = "red";
+            document.getElementById('msg').innerText = "YOU WERE CAUGHT";
             document.body.style.backgroundColor = "#200";
         }
 
