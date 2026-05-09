@@ -2,181 +2,220 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Poppy Playtime: Electricity Puzzle</title>
+    <title>Poppy Playtime - Full 3D Movement</title>
     <style>
-        :root { --blue: #0088ff; --red: #ff3300; --gold: #ffd700; }
+        :root { --blue: #0055ff; --red: #ff1100; --glow: #00ffff; }
         body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         
-        #game-container { width: 100vw; height: 100vh; perspective: 1000px; background: radial-gradient(circle at center, #111, #000); }
-        
-        #world { position: absolute; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.1s linear; }
+        /* 3Dカメラのベース */
+        #viewport {
+            width: 100vw; height: 100vh;
+            perspective: 1000px;
+            overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+        }
 
-        /* 3D通路 */
-        .wall { position: absolute; background: #151515; border: 1px solid #222; }
-        .floor { width: 2000px; height: 4000px; transform: rotateX(90deg) translate(-50%, -50%) translateZ(-300px); 
-                 background-image: repeating-linear-gradient(#111 0 5px, transparent 5px 100px), repeating-linear-gradient(90deg, #111 0 5px, transparent 5px 100px); }
+        /* プレイヤーの移動・回転を制御する世界コンテナ */
+        #world {
+            position: relative;
+            width: 0; height: 0;
+            transform-style: preserve-3d;
+        }
 
-        /* 電源ソケット（ギミック） */
-        .socket { position: absolute; width: 100px; height: 100px; background: #222; border: 4px solid #444; 
-                  display: flex; align-items: center; justify-content: center; font-size: 40px; transform-style: preserve-3d; }
-        #power-source { transform: translate3d(-600px, -150px, -1200px); border-color: var(--blue); }
-        #door-switch { transform: translate3d(500px, -150px, -1200px); border-color: var(--red); }
-        .charged { border-color: var(--gold) !important; box-shadow: 0 0 30px var(--gold); background: #332b00; }
+        /* ステージの床（無限に続くタイル） */
+        .floor {
+            position: absolute; width: 5000px; height: 5000px;
+            background: 
+                radial-gradient(circle, transparent 20%, #000 80%),
+                repeating-linear-gradient(#111 0 2px, transparent 2px 100px),
+                repeating-linear-gradient(90deg, #111 0 2px, transparent 2px 100px);
+            transform: rotateX(90deg) translate(-50%, -50%);
+            transform-origin: center;
+        }
+
+        /* ギミック：通電ポール */
+        .pillar {
+            position: absolute; width: 100px; height: 400px;
+            background: #222; border: 4px solid #444;
+            transform-style: preserve-3d;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .pillar.active { border-color: var(--glow); box-shadow: 0 0 50px var(--glow); }
 
         /* 青いモンスター立方体 */
-        #monster { position: absolute; width: 250px; height: 400px; transform: translate3d(-125px, -350px, -2000px); transform-style: preserve-3d; }
-        .m-face { position: absolute; width: 250px; height: 400px; background: #001a4d; border: 4px solid #00f; }
+        #monster {
+            position: absolute; width: 200px; height: 300px;
+            background: #001a4d; border: 4px solid #00f;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 80px; transform-style: preserve-3d;
+        }
 
-        /* グラブパックUI */
-        .hand-anchor { position: absolute; bottom: 0; width: 120px; height: 120px; z-index: 100; transform-style: preserve-3d; }
-        #anchor-l { left: 10%; }
-        #anchor-r { right: 10%; }
-        
-        .hand-box { width: 100px; height: 80px; position: relative; transform-style: preserve-3d; transition: transform 0.3s cubic-bezier(0.17, 0.67, 0.61, 1.3); }
-        .h-face { position: absolute; width: 100px; height: 80px; border: 2px solid rgba(255,255,255,0.5); }
-        
-        .wire { position: absolute; bottom: 60px; left: 50px; width: 6px; height: 0; transform-origin: bottom center; z-index: 90; }
+        /* GrabPack UI（カメラに追従） */
+        .hud-hand {
+            position: fixed; bottom: -20px; width: 150px; height: 120px;
+            z-index: 1000; pointer-events: none;
+            transition: transform 0.2s cubic-bezier(0.1, 0.7, 0.3, 1.2);
+        }
+        #hud-l { left: 10%; }
+        #hud-r { right: 10%; }
 
-        #hud { position: fixed; top: 20px; width: 100%; text-align: center; pointer-events: none; text-shadow: 0 0 10px #000; }
-        #glitch { position: fixed; inset: 0; background: rgba(255,255,255,0.1); display: none; pointer-events: none; z-index: 200; }
+        .hand-model {
+            width: 100%; height: 100%; position: relative; transform-style: preserve-3d;
+        }
+        .face { position: absolute; width: 100px; height: 80px; border: 2px solid rgba(255,255,255,0.3); }
+
+        /* ワイヤー演出 */
+        .cable {
+            position: fixed; bottom: 50px; width: 6px; 
+            transform-origin: bottom center; z-index: 900;
+        }
+
+        #ui { position: fixed; top: 20px; width: 100%; text-align: center; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div id="glitch"></div>
-<div id="hud">
-    <div style="color: #666; font-size: 12px;">FACILITY POWER STATUS: <span id="p-status">OFF</span></div>
-    <h1 id="msg">CONNECT THE CIRCUIT</h1>
-    <p>[A] LEFT HAND | [D] RIGHT HAND | [S] RESET | [←][→] LOOK</p>
+<div id="ui">
+    <div style="font-size: 10px; opacity: 0.5;">PLAYTIME CO. OS v0.9</div>
+    <h2 id="msg">FIND THE POWER SOURCE</h2>
+    <p>WASD: WALK | ARROWS: LOOK | F/G: GRAB | R: RESET</p>
 </div>
 
-<div id="game-container">
+<div id="viewport">
     <div id="world">
-        <div class="wall floor"></div>
-        <div id="power-source" class="socket">🔵</div>
-        <div id="door-switch" class="socket">🔴</div>
+        <div class="floor"></div>
         
-        <div id="monster">
-            <div class="m-face" style="transform: translateZ(50px); display: flex; align-items: center; justify-content: center; font-size: 100px;">👁️</div>
-            <div class="m-face" style="transform: rotateY(180deg) translateZ(50px);"></div>
-        </div>
+        <!-- オブジェクト配置 -->
+        <div id="pillar-l" class="pillar" style="transform: translate3d(-600px, -200px, -1500px);">⚡<br>L</div>
+        <div id="pillar-r" class="pillar" style="transform: translate3d(600px, -200px, -1500px);">⚡<br>R</div>
+        
+        <div id="monster">👹</div>
     </div>
 </div>
 
-<!-- GrabPack Hands -->
-<div id="anchor-l" class="hand-anchor">
-    <div id="wire-l" class="wire" style="background: var(--blue);"></div>
-    <div id="hand-l" class="hand-box">
-        <div class="h-face" style="background: var(--blue); transform: translateZ(20px);"></div>
-        <div class="h-face" style="background: var(--blue); transform: rotateY(180deg) translateZ(20px);"></div>
-    </div>
+<!-- プレイヤーのGrabPack -->
+<div id="hud-l" class="hud-hand">
+    <div id="cable-l" class="cable" style="background: var(--blue); left: 75px;"></div>
+    <div id="model-l" class="hand-model" style="background: var(--blue);"></div>
 </div>
-
-<div id="anchor-r" class="hand-anchor">
-    <div id="wire-r" class="wire" style="background: var(--red);"></div>
-    <div id="hand-r" class="hand-box">
-        <div class="h-face" style="background: var(--red); transform: translateZ(20px);"></div>
-        <div class="h-face" style="background: var(--red); transform: rotateY(180deg) translateZ(20px);"></div>
-    </div>
+<div id="hud-r" class="hud-hand">
+    <div id="cable-r" class="cable" style="background: var(--red); right: 75px;"></div>
+    <div id="model-r" class="hand-model" style="background: var(--red);"></div>
 </div>
 
 <script>
     const world = document.getElementById('world');
-    const handL = document.getElementById('hand-l');
-    const handR = document.getElementById('hand-r');
-    const wireL = document.getElementById('wire-l');
-    const wireR = document.getElementById('wire-r');
     const monster = document.getElementById('monster');
-    const glitch = document.getElementById('glitch');
+    const msg = document.getElementById('msg');
+    const hudL = document.getElementById('model-l');
+    const hudR = document.getElementById('model-r');
+    const cableL = document.getElementById('cable-l');
+    const cableR = document.getElementById('cable-r');
 
-    let rotY = 0;
-    let monsterZ = -2000;
+    // プレイヤーの状態
+    let posX = 0, posZ = 0;
+    let rotX = 0, rotY = 0;
+    let monsterZ = -2500;
     let lAttached = false, rAttached = false;
-    let gameOver = false;
-    const keys = {};
+    let walkCycle = 0;
 
+    const keys = {};
     window.addEventListener('keydown', e => {
         keys[e.code] = true;
-        if(gameOver) return;
-        if(e.code === 'KeyA') attachHand('L');
-        if(e.code === 'KeyD') attachHand('R');
-        if(e.code === 'KeyS') resetHands();
+        if(e.code === 'KeyF') shoot('L');
+        if(e.code === 'KeyG') shoot('R');
+        if(e.code === 'KeyR') reset();
     });
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    function attachHand(side) {
-        const hand = side === 'L' ? handL : handR;
-        const wire = side === 'L' ? wireL : wireR;
-        const target = side === 'L' ? document.getElementById('power-source') : document.getElementById('door-switch');
+    function shoot(side) {
+        const model = side === 'L' ? hudL : hudR;
+        const cable = side === 'L' ? cableL : cableR;
         
-        // 射出
-        hand.style.transform = "translate3d(0, -400px, -1200px) rotateX(360deg)";
-        wire.style.height = "1200px";
-        wire.style.transform = "rotateX(-30deg)";
+        model.style.transform = "translateY(-400px) translateZ(-1000px) rotateX(360deg)";
+        cable.style.height = "1000px";
+        cable.style.transform = "rotateX(-30deg)";
 
         setTimeout(() => {
-            // 当たり判定
-            const hit = (side === 'L' && rotY > 20 && rotY < 40) || (side === 'R' && rotY < -20 && rotY > -40);
-            if(hit) {
+            // 当たり判定：ターゲットとの距離と角度を計算
+            // 簡易的に「特定の場所で特定の方向を向いているか」で判定
+            const targetX = side === 'L' ? -600 : 600;
+            const targetZ = -1500;
+            
+            // プレイヤー座標とターゲットの距離チェック
+            const dist = Math.sqrt(Math.pow(posX - targetX, 2) + Math.pow(posZ - targetZ, 2));
+            if(dist < 500 && Math.abs(rotY - (side === 'L' ? 20 : -20)) < 15) {
                 if(side === 'L') lAttached = true; else rAttached = true;
-                target.classList.add('charged');
-                checkCircuit();
+                document.getElementById(side === 'L' ? 'pillar-l' : 'pillar-r').classList.add('active');
+                checkWin();
             } else {
                 setTimeout(() => {
-                    if(!(side === 'L' ? lAttached : rAttached)) resetHand(side);
+                    if(!(side === 'L' ? lAttached : rAttached)) {
+                        model.style.transform = "";
+                        cable.style.height = "0";
+                    }
                 }, 200);
             }
         }, 300);
     }
 
-    function checkCircuit() {
+    function checkWin() {
         if(lAttached && rAttached) {
-            document.getElementById('p-status').innerText = "CONNECTED";
-            document.getElementById('p-status').style.color = "var(--gold)";
-            document.getElementById('msg').innerText = "CIRCUIT COMPLETE - REPELLING";
-            monsterZ -= 1000; // 電気が流れてモンスターが逃げる
+            msg.innerText = "CIRCUIT CONNECTED - PUSHING BACK";
+            monsterZ -= 1500;
         }
     }
 
-    function resetHands() {
-        resetHand('L'); resetHand('R');
+    function reset() {
         lAttached = rAttached = false;
-        document.querySelectorAll('.socket').forEach(s => s.classList.remove('charged'));
-        document.getElementById('p-status').innerText = "OFF";
-        document.getElementById('p-status').style.color = "#666";
-    }
-
-    function resetHand(side) {
-        const hand = side === 'L' ? handL : handR;
-        const wire = side === 'L' ? wireL : wireR;
-        hand.style.transform = "translate3d(0,0,0)";
-        wire.style.height = "0";
+        hudL.style.transform = hudR.style.transform = "";
+        cableL.style.height = cableR.style.height = "0";
+        document.querySelectorAll('.pillar').forEach(p => p.classList.remove('active'));
     }
 
     function update() {
-        if(gameOver) return;
-
+        // 視点操作（矢印キー）
         if(keys['ArrowLeft']) rotY += 2;
         if(keys['ArrowRight']) rotY -= 2;
-        rotY = Math.max(Math.min(rotY, 50), -50);
-        world.style.transform = `rotateY(${rotY}deg)`;
+        if(keys['ArrowUp']) rotX = Math.min(rotX + 2, 30);
+        if(keys['ArrowDown']) rotX = Math.max(rotX - 2, -30);
 
-        monsterZ += (lAttached && rAttached) ? 1 : 4; // 通電中は進みが遅くなる
-        monster.style.transform = `translate3d(-125px, -350px, ${monsterZ}px)`;
+        // 移動操作（WASD）
+        let moveX = 0, moveZ = 0;
+        const speed = 10;
+        const rad = rotY * Math.PI / 180;
 
-        // 接近演出
-        if(monsterZ > -800) {
-            glitch.style.display = Math.random() > 0.8 ? 'block' : 'none';
+        if(keys['KeyW']) { moveZ = Math.cos(rad) * speed; moveX = Math.sin(rad) * speed; }
+        if(keys['KeyS']) { moveZ = -Math.cos(rad) * speed; moveX = -Math.sin(rad) * speed; }
+        if(keys['KeyA']) { moveZ = Math.sin(rad) * speed; moveX = -Math.cos(rad) * speed; }
+        if(keys['KeyD']) { moveZ = -Math.sin(rad) * speed; moveX = Math.cos(rad) * speed; }
+
+        posX += moveX;
+        posZ += moveZ;
+
+        // 歩行ボブ効果（カメラの揺れ）
+        if(moveX !== 0 || moveZ !== 0) {
+            walkCycle += 0.2;
+            const bob = Math.sin(walkCycle) * 5;
+            world.style.top = bob + "px";
         }
 
-        if(monsterZ > -300) {
-            gameOver = true;
-            document.getElementById('msg').innerText = "YOU WERE CAUGHT";
-            document.body.style.backgroundColor = "#200";
+        // ワールドの変形適用
+        world.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg) translate3d(${posX}px, 0, ${posZ}px)`;
+
+        // モンスターの接近
+        monsterZ += (lAttached && rAttached) ? 1 : 5;
+        monster.style.transform = `translate3d(-100px, -250px, ${monsterZ}px)`;
+
+        if(monsterZ > -200) {
+            msg.innerText = "CAUGHT BY MONSTER";
+            msg.style.color = "red";
+            monsterZ = -2500; // 簡易リセット
         }
 
         requestAnimationFrame(update);
     }
+
     update();
 </script>
 </body>
