@@ -42,8 +42,8 @@ canvas{
     position:absolute;
     top:20px;
     left:20px;
-    width:380px;
-    background:rgba(0,0,0,0.7);
+    width:420px;
+    background:rgba(0,0,0,0.75);
     border:1px solid rgba(255,255,255,0.2);
     padding:16px;
     line-height:1.8;
@@ -55,7 +55,7 @@ canvas{
     left:50%;
     bottom:40px;
     transform:translateX(-50%);
-    background:rgba(0,0,0,0.75);
+    background:rgba(0,0,0,0.8);
     padding:12px 20px;
     opacity:0;
     transition:0.3s;
@@ -81,7 +81,7 @@ canvas{
     position:absolute;
     right:20px;
     bottom:20px;
-    background:rgba(0,0,0,0.6);
+    background:rgba(0,0,0,0.7);
     border:1px solid rgba(255,255,255,0.3);
     padding:10px 14px;
     font-size:14px;
@@ -104,15 +104,17 @@ canvas{
 
     <div id="crosshair">+</div>
 
-    <div id="objective">
+    <div id="objective" id="objectiveText">
         <b>OBJECTIVE</b><br><br>
 
-        管理室に入るための<br>
-        「中央電源」を復旧する。<br><br>
+        管理室に入るために<br>
+        「3つの電源スイッチ」を起動する。<br><br>
 
-        ① 倉庫エリアでヒューズを探す<br>
-        ② 中央ブレーカーへ向かう<br>
-        ③ Eキーで電源を復旧する<br><br>
+        ① メリーゴーランド電源<br>
+        ② ゲームコーナー電源<br>
+        ③ 中央ブレーカー<br><br>
+
+        最後に管理室へ向かう。<br><br>
 
         WASD : 移動<br>
         SHIFT : ダッシュ<br>
@@ -141,7 +143,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const scene = new THREE.Scene();
 
-scene.fog = new THREE.Fog(0x000000, 2, 22);
+scene.fog = new THREE.Fog(0x000000,2,24);
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -205,11 +207,12 @@ function createWall(x,y,z,w,h,d,color=0x222222){
     const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(w,h,d),
         new THREE.MeshStandardMaterial({
-            color:color
+            color
         })
     );
 
     mesh.position.set(x,y,z);
+
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
@@ -241,6 +244,7 @@ function createLamp(x,z){
     );
 
     pole.position.set(x,2.5,z);
+
     scene.add(pole);
 
     const light = new THREE.PointLight(
@@ -278,6 +282,7 @@ const pole = new THREE.Mesh(
 );
 
 pole.position.y = 3;
+
 carousel.add(pole);
 
 for(let i=0;i<6;i++){
@@ -345,29 +350,37 @@ panda.visible = false;
 
 scene.add(panda);
 
-const fuse = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5,0.5,0.5),
+function createSwitch(x,z,color){
+
+    const switchBox = new THREE.Mesh(
+        new THREE.BoxGeometry(1,1,1),
+        new THREE.MeshStandardMaterial({
+            color,
+            emissive:0x111111
+        })
+    );
+
+    switchBox.position.set(x,1,z);
+
+    scene.add(switchBox);
+
+    return switchBox;
+}
+
+const carouselSwitch = createSwitch(-14,-10,0xff4444);
+const arcadeSwitch = createSwitch(13,-10,0x4444ff);
+const mainBreaker = createSwitch(14,10,0x00ffcc);
+
+const door = new THREE.Mesh(
+    new THREE.BoxGeometry(4,4,0.5),
     new THREE.MeshStandardMaterial({
-        color:0xffff00,
-        emissive:0x666600
+        color:0x333333
     })
 );
 
-fuse.position.set(-11,1,-4);
+door.position.set(0,2,5);
 
-scene.add(fuse);
-
-const breaker = new THREE.Mesh(
-    new THREE.BoxGeometry(1,2,1),
-    new THREE.MeshStandardMaterial({
-        color:0x00ffcc,
-        emissive:0x003333
-    })
-);
-
-breaker.position.set(14,1,10);
-
-scene.add(breaker);
+scene.add(door);
 
 const keys = {};
 
@@ -414,42 +427,88 @@ function distance(a,b){
     return a.position.distanceTo(b.position);
 }
 
-let hasFuse = false;
-let powerOn = false;
+let carouselOn = false;
+let arcadeOn = false;
+let breakerOn = false;
+let gameCompleted = false;
+
+function updateObjective(){
+
+    document.getElementById("objective").innerHTML = `
+    <b>OBJECTIVE</b><br><br>
+
+    メリーゴーランド : ${carouselOn ? "ON" : "OFF"}<br>
+    ゲームコーナー : ${arcadeOn ? "ON" : "OFF"}<br>
+    中央ブレーカー : ${breakerOn ? "ON" : "OFF"}<br><br>
+
+    ${gameCompleted ? "管理室へ向かう" : "全ての電源を復旧する"}<br><br>
+
+    WASD : 移動<br>
+    SHIFT : ダッシュ<br>
+    E : 調べる<br>
+    F : ライト ON/OFF
+    `;
+}
 
 function interact(){
 
-    if(distance(camera,fuse) < 2 && !hasFuse){
+    if(distance(camera,carouselSwitch) < 2 && !carouselOn){
 
-        hasFuse = true;
+        carouselOn = true;
 
-        scene.remove(fuse);
+        carouselSwitch.material.emissive.setHex(0xff0000);
 
-        showMessage("ヒューズを入手した");
+        showMessage("メリーゴーランド電源を起動した");
+
+        pandaFlash();
     }
 
-    if(distance(camera,breaker) < 3 && hasFuse && !powerOn){
+    if(distance(camera,arcadeSwitch) < 2 && !arcadeOn){
 
-        powerOn = true;
+        arcadeOn = true;
+
+        arcadeSwitch.material.emissive.setHex(0x0000ff);
+
+        showMessage("ゲームコーナー電源を起動した");
+
+        pandaFlash();
+    }
+
+    if(distance(camera,mainBreaker) < 2 &&
+       carouselOn &&
+       arcadeOn &&
+       !breakerOn){
+
+        breakerOn = true;
+
+        mainBreaker.material.emissive.setHex(0x00ffff);
 
         moon.intensity = 0.35;
 
         showMessage("中央電源を復旧した");
 
+        pandaFlash();
+
         setTimeout(()=>{
-            showMessage("・・・何か動いた");
+
+            showMessage("管理室の扉が開いた");
+
+            gameCompleted = true;
+
+            door.position.y = -5;
+
         },3000);
-
-        setTimeout(()=>{
-            panda.position.set(0,0,-6);
-            panda.visible = true;
-
-            setTimeout(()=>{
-                panda.visible = false;
-            },250);
-
-        },5000);
     }
+
+    if(distance(camera,door) < 3 && gameCompleted){
+
+        document.getElementById("fade").style.opacity = 1;
+
+        showMessage("CHAPTER 1 CLEAR");
+
+    }
+
+    updateObjective();
 }
 
 document.addEventListener("keydown",(e)=>{
@@ -458,6 +517,23 @@ document.addEventListener("keydown",(e)=>{
         interact();
     }
 });
+
+function pandaFlash(){
+
+    panda.position.set(
+        camera.position.x + (Math.random()*8-4),
+        0,
+        camera.position.z + (Math.random()*8-4)
+    );
+
+    panda.lookAt(camera.position);
+
+    panda.visible = true;
+
+    setTimeout(()=>{
+        panda.visible = false;
+    },180);
+}
 
 function checkCollision(position){
 
@@ -485,8 +561,6 @@ function checkCollision(position){
 }
 
 const clock = new THREE.Clock();
-
-let pandaTimer = 0;
 
 function animate(){
 
@@ -587,6 +661,7 @@ function animate(){
     flashlight.position.copy(camera.position);
 
     const direction = new THREE.Vector3();
+
     camera.getWorldDirection(direction);
 
     flashlight.target.position.copy(
@@ -595,30 +670,13 @@ function animate(){
         )
     );
 
-    carousel.rotation.y += 0.2 * delta;
+    if(carouselOn){
 
-    pandaTimer += delta;
+        carousel.rotation.y += 0.8 * delta;
 
-    if(!powerOn){
+    }else{
 
-        if(pandaTimer > 18){
-
-            pandaTimer = 0;
-
-            panda.position.set(
-                (Math.random()*20)-10,
-                0,
-                (Math.random()*20)-10
-            );
-
-            panda.lookAt(camera.position);
-
-            panda.visible = true;
-
-            setTimeout(()=>{
-                panda.visible = false;
-            },180);
-        }
+        carousel.rotation.y += 0.05 * delta;
     }
 
     renderer.render(scene,camera);
