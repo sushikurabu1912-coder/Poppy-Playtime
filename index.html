@@ -2,55 +2,73 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Poppy Playtime - Look Around Edition</title>
+    <title>Poppy Playtime - Keyboard Only Edition</title>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        body { margin: 0; background: #050505; color: #eee; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
         #game-view { 
-            position: relative; width: 800px; height: 600px; margin: 20px auto; 
-            border: 5px solid #222; overflow: hidden; background: #050505;
+            position: relative; width: 800px; height: 500px; margin: 50px auto; 
+            border: 10px solid #222; overflow: hidden; background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
         }
         
-        /* 視点移動するステージ全体 */
+        /* 視点移動するステージ */
         #stage {
-            position: absolute; width: 1600px; height: 600px; left: -400px; /* 初期位置中央 */
-            transition: transform 0.1s ease-out;
+            position: absolute; width: 2000px; height: 100%; left: -600px;
+            transition: left 0.1s linear;
         }
 
-        /* 背景の装飾 */
-        .wall { position: absolute; width: 100%; height: 100%; background-image: repeating-linear-gradient(90deg, #111 0px, #111 50px, #1a1a1a 50px, #1a1a1a 100px); opacity: 0.3; }
+        /* 背景：不気味なタイルと柱 */
+        .bg-pattern {
+            position: absolute; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(90deg, #111 2px, transparent 2px),
+                linear-gradient(#111 2px, transparent 2px);
+            background-size: 100px 100px;
+            opacity: 0.5;
+        }
 
-        /* キャラクターとオブジェクト */
-        #huggy { position: absolute; width: 150px; bottom: 100px; left: 725px; transition: transform 0.1s; font-size: 100px; text-align: center; }
-        .target { position: absolute; width: 100px; height: 100px; background: #333; border: 5px solid #555; top: 250px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
-        #target-l { left: 400px; border-color: #0055ff; }
-        #target-r { left: 1100px; border-color: #ff0000; }
-        .active { background: #0f0 !important; box-shadow: 0 0 30px #0f0; }
+        /* キャラクター */
+        #huggy { 
+            position: absolute; width: 200px; bottom: 80px; left: 900px; 
+            font-size: 120px; text-align: center; transition: transform 0.1s;
+            filter: drop-shadow(0 0 10px #00f);
+        }
 
-        /* グラブパック（視点に固定） */
-        .hand { position: absolute; width: 80px; bottom: -20px; transition: 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28); z-index: 100; }
-        #hand-left { left: 200px; transform: translateY(150px); }
-        #hand-right { right: 200px; transform: translateY(150px); }
+        /* ターゲットスイッチ */
+        .target { 
+            position: absolute; width: 120px; height: 120px; background: #222; 
+            border: 6px inset #444; top: 180px; display: flex; 
+            flex-direction: column; align-items: center; justify-content: center;
+        }
+        .target b { font-size: 24px; margin-bottom: 5px; }
+        #target-l { left: 400px; border-color: #0055ff; color: #0055ff; }
+        #target-r { left: 1480px; border-color: #ff0000; color: #ff0000; }
+        .active { background: #fff !important; box-shadow: 0 0 40px #fff; color: #000 !important; }
 
-        #ui { position: absolute; top: 10px; width: 100%; text-align: center; z-index: 200; pointer-events: none; }
+        /* グラブパック（画面固定） */
+        .hand { position: absolute; width: 100px; bottom: -30px; transition: 0.15s ease-out; z-index: 100; }
+        #hand-left { left: 150px; transform: translateY(200px); filter: hue-rotate(0deg); }
+        #hand-right { right: 150px; transform: translateY(200px); filter: hue-rotate(140deg); }
+
+        #ui { text-align: center; margin-top: 20px; }
+        .kbd { background: #444; padding: 2px 8px; border-radius: 4px; border-bottom: 3px solid #222; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <h1>PLANT FACILITY - SECTOR B</h1>
-    <p>【矢印キー左右】視点移動 | 【左右クリック】GrabPack発射</p>
-    <h2 id="status">MONITORING...</h2>
+    <h2>FACTORY SECURITY MONITOR</h2>
+    <p>視点移動: <span class="kbd">←</span> <span class="kbd">→</span> | 青い手: <span class="kbd">A</span> | 赤い手: <span class="kbd">D</span></p>
+    <h3 id="status" style="color: #0f0;">SYSTEM ONLINE</h3>
 </div>
 
 <div id="game-view">
     <div id="stage">
-        <div class="wall"></div>
-        <div id="target-l" class="target">CHARGE BLUE</div>
-        <div id="target-r" class="target">CHARGE RED</div>
-        <div id="huggy">💙<br>👹</div>
+        <div class="bg-pattern"></div>
+        <div id="target-l" class="target"><b>[A]</b>PUSH</div>
+        <div id="target-r" class="target"><b>[D]</b>PUSH</div>
+        <div id="huggy">👹</div>
     </div>
     
-    <!-- 手は画面に固定 -->
     <img id="hand-left" class="hand" src="https://img.icons8.com/color/96/blue-hand.png">
     <img id="hand-right" class="hand" src="https://img.icons8.com/color/96/red-hand.png">
 </div>
@@ -62,89 +80,78 @@
     const handL = document.getElementById('hand-left');
     const handR = document.getElementById('hand-right');
 
-    let cameraX = -400;
+    let cameraX = -600;
     let huggyScale = 1;
     let gameOver = false;
-    let lActive = false;
-    let rActive = false;
 
-    // 視点移動の処理
+    // キーボード入力の状態管理
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    // 単発押しイベント（AキーとDキー）
     window.addEventListener('keydown', (e) => {
         if (gameOver) return;
-        if (e.key === "ArrowLeft") {
-            cameraX += 20;
-        } else if (e.key === "ArrowRight") {
-            cameraX -= 20;
-        }
-        // 移動制限
-        cameraX = Math.min(Math.max(cameraX, -800), 0);
-        stage.style.left = cameraX + "px";
-    });
-
-    // ハギーの接近
-    const gameLoop = setInterval(() => {
-        if (gameOver) return;
-        huggyScale += 0.003;
-        huggy.style.transform = `scale(${huggyScale})`;
-        if (huggyScale > 4) endGame();
-    }, 30);
-
-    // GrabPack発射（クリックした方向に飛ばすのではなく、正面のターゲットに当てる簡易仕様）
-    window.addEventListener('mousedown', (e) => {
-        if (gameOver) return;
-        if (e.button === 0) {
-            shoot('L');
-        } else if (e.button === 2) {
-            shoot('R');
-        }
+        if (e.code === 'KeyA') shoot('L');
+        if (e.code === 'KeyD') shoot('R');
     });
 
     function shoot(side) {
         const hand = (side === 'L') ? handL : handR;
-        hand.style.transform = "translateY(-350px)";
+        const target = (side === 'L') ? document.getElementById('target-l') : document.getElementById('target-r');
+        
+        // アニメーション
+        hand.style.transform = "translateY(-400px)";
         
         setTimeout(() => {
-            // 視点がターゲットに合っているか判定
-            if (side === 'L' && cameraX > -150 && cameraX < 50) {
-                lActive = true;
-                document.getElementById('target-l').classList.add('active');
-            }
-            if (side === 'R' && cameraX > -750 && cameraX < -550) {
-                rActive = true;
-                document.getElementById('target-r').classList.add('active');
-            }
-            checkWin();
+            // 当たり判定：ターゲットが画面の一定範囲内にあるか
+            // ステージの左端からの距離とcameraXの関係で判定
+            const targetPos = (side === 'L') ? (400 + cameraX) : (1480 + cameraX);
             
+            // 画面中央（400px付近）にターゲットがいればヒット
+            if (targetPos > 250 && targetPos < 450) {
+                target.classList.add('active');
+                huggyScale = Math.max(0.5, huggyScale - 0.4);
+                statusText.innerText = "CRITICAL HIT!";
+                statusText.style.color = "#fff";
+                setTimeout(() => { statusText.innerText = "KEEP DISTANCE"; statusText.style.color = "#ff0"; }, 500);
+            }
+
             setTimeout(() => {
-                hand.style.transform = "translateY(150px)";
-                resetSwitches();
-            }, 400);
-        }, 200);
+                hand.style.transform = "translateY(200px)";
+                target.classList.remove('active');
+            }, 300);
+        }, 150);
     }
 
-    function resetSwitches() {
-        lActive = false; rActive = false;
-        document.querySelectorAll('.target').forEach(t => t.classList.remove('active'));
-    }
+    // ゲームループ（移動とハギーの接近）
+    function update() {
+        if (gameOver) return;
 
-    function checkWin() {
-        if (lActive || rActive) { // どちらか当たれば少し下がる、両方なら大幅に下がる
-            huggyScale = Math.max(1, huggyScale - 0.5);
-            statusText.innerText = "KEEP BACK!!";
-            statusText.style.color = "#0ff";
+        // 視点移動
+        if (keys['ArrowLeft']) cameraX += 12;
+        if (keys['ArrowRight']) cameraX -= 12;
+        
+        // 移動範囲制限
+        cameraX = Math.min(Math.max(cameraX, -1200), 0);
+        stage.style.left = cameraX + "px";
+
+        // ハギー接近
+        huggyScale += 0.004;
+        huggy.style.transform = `scale(${huggyScale})`;
+
+        if (huggyScale > 5) {
+            gameOver = true;
+            statusText.innerText = "FATAL ERROR: TOY BREACHED";
+            statusText.style.color = "red";
+            huggy.innerText = "💀";
+            document.body.style.backgroundColor = "#200";
         }
+
+        requestAnimationFrame(update);
     }
 
-    function endGame() {
-        gameOver = true;
-        clearInterval(gameLoop);
-        statusText.innerText = "EVERYONE FORGETS THE RULES...";
-        statusText.style.color = "red";
-        huggy.innerHTML = "💀";
-        document.body.style.backgroundColor = "#200";
-    }
-
-    window.oncontextmenu = (e) => e.preventDefault();
+    update();
 </script>
 </body>
 </html>
