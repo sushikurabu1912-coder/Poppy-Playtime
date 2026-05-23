@@ -22,6 +22,7 @@
         background:rgba(0,0,0,0.5);
         padding:10px;
         border-radius:10px;
+        line-height:1.6;
     }
 
     #message{
@@ -39,9 +40,9 @@
 <body>
 
 <div id="ui">
-    WASDで移動<br>
-    マウスで視点操作<br>
-    バッテリーを3つ集めろ
+    WASD = 移動<br>
+    矢印キー = 視点変更<br>
+    バッテリーを3つ集めて脱出！
 </div>
 
 <div id="message"></div>
@@ -49,20 +50,26 @@
 <script type="module">
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
-import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/controls/PointerLockControls.js';
+
+/////////////////////////
+// シーン
+/////////////////////////
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
-scene.fog = new THREE.Fog(0x000000, 10, 80);
+scene.fog = new THREE.Fog(0x000000, 10, 100);
 
 const camera = new THREE.PerspectiveCamera(
     75,
-    window.innerWidth/window.innerHeight,
+    window.innerWidth / window.innerHeight,
     0.1,
     1000
 );
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const renderer = new THREE.WebGLRenderer({
+    antialias:true
+});
+
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
@@ -74,33 +81,25 @@ const ambient = new THREE.AmbientLight(0x404040, 1);
 scene.add(ambient);
 
 const flashlight = new THREE.SpotLight(0xffffff, 5);
-flashlight.angle = 0.4;
+
+flashlight.angle = 0.5;
 flashlight.penumbra = 0.5;
-flashlight.distance = 60;
+flashlight.distance = 70;
 
 scene.add(flashlight);
 scene.add(flashlight.target);
 
 /////////////////////////
-// 操作
-/////////////////////////
-
-const controls = new PointerLockControls(camera, document.body);
-
-document.body.addEventListener('click', ()=>{
-    controls.lock();
-});
-
-/////////////////////////
 // 床
 /////////////////////////
 
-const floorGeo = new THREE.PlaneGeometry(200,200);
-const floorMat = new THREE.MeshStandardMaterial({
-    color:0x222222
-});
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(200,200),
+    new THREE.MeshStandardMaterial({
+        color:0x222222
+    })
+);
 
-const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
@@ -108,34 +107,63 @@ scene.add(floor);
 // 壁
 /////////////////////////
 
-function wall(x,y,z,w,h,d){
+function wall(x,y,z,w,h,d,color=0x444444){
 
     const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(w,h,d),
         new THREE.MeshStandardMaterial({
-            color:0x444444
+            color:color
         })
     );
 
     mesh.position.set(x,y,z);
+
     scene.add(mesh);
 }
 
-wall(0,5,-30,60,10,2);
-wall(-30,5,0,2,10,60);
-wall(30,5,0,2,10,60);
+wall(0,5,-80,160,10,2);
+wall(-80,5,0,2,10,160);
+wall(80,5,0,2,10,160);
+
+wall(0,5,80,160,10,2);
+
+wall(-30,5,-20,2,10,40);
+wall(20,5,-40,40,10,2);
+wall(40,5,10,2,10,50);
 
 /////////////////////////
 // プレイヤー
 /////////////////////////
 
-camera.position.set(0,2,10);
+camera.position.set(0,2,20);
+
+/////////////////////////
+// 視点回転
+/////////////////////////
+
+let yaw = 0;
+let pitch = 0;
+
+/////////////////////////
+// キー入力
+/////////////////////////
+
+const keys = {};
+
+document.addEventListener("keydown", e=>{
+    keys[e.key.toLowerCase()] = true;
+});
+
+document.addEventListener("keyup", e=>{
+    keys[e.key.toLowerCase()] = false;
+});
 
 /////////////////////////
 // バッテリー
 /////////////////////////
 
 const batteries = [];
+let collected = 0;
 
 function createBattery(x,z){
 
@@ -151,12 +179,13 @@ function createBattery(x,z){
     mesh.position.set(x,1,z);
 
     scene.add(mesh);
+
     batteries.push(mesh);
 }
 
-createBattery(-10,-10);
-createBattery(10,-20);
-createBattery(0,-40);
+createBattery(-20,-20);
+createBattery(30,-50);
+createBattery(-40,40);
 
 /////////////////////////
 // モンスター
@@ -171,7 +200,8 @@ const monster = new THREE.Mesh(
     })
 );
 
-monster.position.set(0,3,-50);
+monster.position.set(0,3,-60);
+
 scene.add(monster);
 
 /////////////////////////
@@ -179,42 +209,184 @@ scene.add(monster);
 /////////////////////////
 
 const door = new THREE.Mesh(
-    new THREE.BoxGeometry(6,10,1),
+    new THREE.BoxGeometry(8,10,1),
     new THREE.MeshStandardMaterial({
         color:0x888888
     })
 );
 
-door.position.set(0,5,-70);
+door.position.set(0,5,-75);
+
 scene.add(door);
 
 /////////////////////////
-// 移動
+// ゲーム状態
 /////////////////////////
 
-const keys = {};
-let collected = 0;
 let gameOver = false;
 
-document.addEventListener('keydown', e=>{
-    keys[e.key.toLowerCase()] = true;
-});
-
-document.addEventListener('keyup', e=>{
-    keys[e.key.toLowerCase()] = false;
-});
-
-/////////////////////////
-// UI
-/////////////////////////
-
-const msg = document.getElementById("message");
+const message = document.getElementById("message");
 
 function endGame(text){
 
     gameOver = true;
-    msg.style.display = "block";
-    msg.innerHTML = text;
+
+    message.style.display = "block";
+    message.innerHTML = text;
+}
+
+/////////////////////////
+// カメラ回転
+/////////////////////////
+
+function updateCameraRotation(){
+
+    const rotateSpeed = 0.03;
+
+    if(keys["arrowleft"]){
+        yaw += rotateSpeed;
+    }
+
+    if(keys["arrowright"]){
+        yaw -= rotateSpeed;
+    }
+
+    if(keys["arrowup"]){
+        pitch += rotateSpeed;
+    }
+
+    if(keys["arrowdown"]){
+        pitch -= rotateSpeed;
+    }
+
+    pitch = Math.max(-1.2, Math.min(1.2, pitch));
+
+    camera.rotation.order = "YXZ";
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+}
+
+/////////////////////////
+// プレイヤー移動
+/////////////////////////
+
+function updateMovement(){
+
+    const speed = 0.2;
+
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+
+    forward.y = 0;
+    forward.normalize();
+
+    const right = new THREE.Vector3();
+    right.crossVectors(forward, new THREE.Vector3(0,1,0));
+
+    if(keys["w"]){
+        camera.position.add(
+            forward.clone().multiplyScalar(speed)
+        );
+    }
+
+    if(keys["s"]){
+        camera.position.add(
+            forward.clone().multiplyScalar(-speed)
+        );
+    }
+
+    if(keys["a"]){
+        camera.position.add(
+            right.clone().multiplyScalar(speed)
+        );
+    }
+
+    if(keys["d"]){
+        camera.position.add(
+            right.clone().multiplyScalar(-speed)
+        );
+    }
+}
+
+/////////////////////////
+// 懐中電灯
+/////////////////////////
+
+function updateFlashlight(){
+
+    flashlight.position.copy(camera.position);
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+
+    flashlight.target.position.copy(
+        camera.position.clone().add(dir)
+    );
+}
+
+/////////////////////////
+// バッテリー取得
+/////////////////////////
+
+function updateBatteries(){
+
+    batteries.forEach(b=>{
+
+        if(!b.visible) return;
+
+        b.rotation.y += 0.03;
+
+        const dist = camera.position.distanceTo(b.position);
+
+        if(dist < 2){
+
+            b.visible = false;
+
+            collected++;
+
+            console.log("Collected:", collected);
+        }
+    });
+}
+
+/////////////////////////
+// モンスターAI
+/////////////////////////
+
+function updateMonster(){
+
+    const dir = new THREE.Vector3()
+        .subVectors(camera.position, monster.position)
+        .normalize();
+
+    monster.position.add(
+        dir.multiplyScalar(0.04)
+    );
+
+    monster.lookAt(camera.position);
+
+    const dist = camera.position.distanceTo(monster.position);
+
+    if(dist < 3){
+
+        endGame("GAME OVER");
+    }
+}
+
+/////////////////////////
+// 脱出判定
+/////////////////////////
+
+function updateDoor(){
+
+    if(collected < 3) return;
+
+    const dist = camera.position.distanceTo(door.position);
+
+    if(dist < 6){
+
+        endGame("YOU ESCAPED!");
+    }
 }
 
 /////////////////////////
@@ -227,79 +399,17 @@ function animate(){
 
     if(!gameOver){
 
-        const speed = 0.15;
+        updateCameraRotation();
 
-        if(keys["w"]) controls.moveForward(speed);
-        if(keys["s"]) controls.moveForward(-speed);
-        if(keys["a"]) controls.moveRight(-speed);
-        if(keys["d"]) controls.moveRight(speed);
+        updateMovement();
 
-        /////////////////////////
-        // 懐中電灯
-        /////////////////////////
+        updateFlashlight();
 
-        flashlight.position.copy(camera.position);
+        updateBatteries();
 
-        const dir = new THREE.Vector3();
-        camera.getWorldDirection(dir);
+        updateMonster();
 
-        flashlight.target.position.copy(
-            camera.position.clone().add(dir)
-        );
-
-        /////////////////////////
-        // バッテリー取得
-        /////////////////////////
-
-        batteries.forEach((b,i)=>{
-
-            if(!b.visible) return;
-
-            const dist = camera.position.distanceTo(b.position);
-
-            b.rotation.y += 0.03;
-
-            if(dist < 2){
-
-                b.visible = false;
-                collected++;
-
-                console.log("Battery:", collected);
-            }
-        });
-
-        /////////////////////////
-        // モンスター追跡
-        /////////////////////////
-
-        const direction = new THREE.Vector3()
-            .subVectors(camera.position, monster.position)
-            .normalize();
-
-        monster.position.add(direction.multiplyScalar(0.03));
-
-        monster.lookAt(camera.position);
-
-        const mdist = camera.position.distanceTo(monster.position);
-
-        if(mdist < 3){
-
-            endGame("GAME OVER");
-        }
-
-        /////////////////////////
-        // 脱出
-        /////////////////////////
-
-        if(collected >= 3){
-
-            const ddist = camera.position.distanceTo(door.position);
-
-            if(ddist < 5){
-
-                endGame("YOU ESCAPED!");
-            }
-        }
+        updateDoor();
     }
 
     renderer.render(scene, camera);
@@ -311,14 +421,19 @@ animate();
 // リサイズ
 /////////////////////////
 
-window.addEventListener('resize', ()=>{
+window.addEventListener("resize", ()=>{
 
     camera.aspect = window.innerWidth/window.innerHeight;
+
     camera.updateProjectionMatrix();
 
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
 });
 
 </script>
+
 </body>
 </html>
