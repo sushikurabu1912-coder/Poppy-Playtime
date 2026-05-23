@@ -1,85 +1,25 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Poppy Style Horror Game</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Horror Factory</title>
 
 <style>
-    *{
-        margin:0;
-        padding:0;
-        box-sizing:border-box;
-        font-family: sans-serif;
-    }
-
     body{
-        background:#111;
-        color:white;
+        margin:0;
         overflow:hidden;
-    }
-
-    #game{
-        width:100vw;
-        height:100vh;
-        position:relative;
-        background:
-            linear-gradient(rgba(0,0,0,.7), rgba(0,0,0,.7)),
-            url('https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1200&auto=format&fit=crop');
-        background-size:cover;
-        background-position:center;
-    }
-
-    #player{
-        width:40px;
-        height:40px;
-        border-radius:50%;
-        background:#00ffcc;
-        position:absolute;
-        left:80px;
-        top:80px;
-        box-shadow:0 0 20px #00ffcc;
-        z-index:5;
-    }
-
-    #monster{
-        width:60px;
-        height:60px;
-        background:#0066ff;
-        border-radius:10px;
-        position:absolute;
-        right:100px;
-        bottom:100px;
-        box-shadow:0 0 25px #0066ff;
-        transition:0.08s linear;
-    }
-
-    .battery{
-        width:30px;
-        height:30px;
-        background:yellow;
-        position:absolute;
-        border-radius:5px;
-        box-shadow:0 0 15px yellow;
-    }
-
-    #door{
-        width:100px;
-        height:160px;
-        background:#444;
-        border:5px solid #888;
-        position:absolute;
-        right:50px;
-        top:50%;
-        transform:translateY(-50%);
+        background:black;
+        font-family:sans-serif;
     }
 
     #ui{
         position:absolute;
         top:10px;
         left:10px;
+        color:white;
         z-index:10;
-        background:rgba(0,0,0,.5);
+        background:rgba(0,0,0,0.5);
         padding:10px;
         border-radius:10px;
     }
@@ -89,163 +29,296 @@
         top:50%;
         left:50%;
         transform:translate(-50%,-50%);
-        font-size:48px;
+        color:white;
+        font-size:60px;
         display:none;
         z-index:20;
-        text-align:center;
-    }
-
-    #instructions{
-        position:absolute;
-        bottom:10px;
-        left:10px;
-        background:rgba(0,0,0,.6);
-        padding:10px;
-        border-radius:10px;
-        z-index:10;
     }
 </style>
 </head>
 <body>
 
-<div id="game">
-
-    <div id="player"></div>
-    <div id="monster"></div>
-    <div id="door"></div>
-
-    <div class="battery" style="left:300px; top:200px;"></div>
-    <div class="battery" style="left:600px; top:500px;"></div>
-    <div class="battery" style="left:900px; top:150px;"></div>
-
-    <div id="ui">
-        バッテリー: <span id="count">0</span>/3
-    </div>
-
-    <div id="instructions">
-        WASD または 矢印キーで移動<br>
-        バッテリーを3個集めて出口へ！
-    </div>
-
-    <div id="message"></div>
-
+<div id="ui">
+    WASDで移動<br>
+    マウスで視点操作<br>
+    バッテリーを3つ集めろ
 </div>
 
-<script>
-const player = document.getElementById("player");
-const monster = document.getElementById("monster");
-const batteries = document.querySelectorAll(".battery");
-const countText = document.getElementById("count");
-const message = document.getElementById("message");
-const door = document.getElementById("door");
+<div id="message"></div>
 
-let px = 80;
-let py = 80;
+<script type="module">
 
-let mx = window.innerWidth - 160;
-let my = window.innerHeight - 160;
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
+import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/controls/PointerLockControls.js';
 
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050505);
+scene.fog = new THREE.Fog(0x000000, 10, 80);
+
+const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth/window.innerHeight,
+    0.1,
+    1000
+);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/////////////////////////
+// ライト
+/////////////////////////
+
+const ambient = new THREE.AmbientLight(0x404040, 1);
+scene.add(ambient);
+
+const flashlight = new THREE.SpotLight(0xffffff, 5);
+flashlight.angle = 0.4;
+flashlight.penumbra = 0.5;
+flashlight.distance = 60;
+
+scene.add(flashlight);
+scene.add(flashlight.target);
+
+/////////////////////////
+// 操作
+/////////////////////////
+
+const controls = new PointerLockControls(camera, document.body);
+
+document.body.addEventListener('click', ()=>{
+    controls.lock();
+});
+
+/////////////////////////
+// 床
+/////////////////////////
+
+const floorGeo = new THREE.PlaneGeometry(200,200);
+const floorMat = new THREE.MeshStandardMaterial({
+    color:0x222222
+});
+
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+
+/////////////////////////
+// 壁
+/////////////////////////
+
+function wall(x,y,z,w,h,d){
+
+    const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w,h,d),
+        new THREE.MeshStandardMaterial({
+            color:0x444444
+        })
+    );
+
+    mesh.position.set(x,y,z);
+    scene.add(mesh);
+}
+
+wall(0,5,-30,60,10,2);
+wall(-30,5,0,2,10,60);
+wall(30,5,0,2,10,60);
+
+/////////////////////////
+// プレイヤー
+/////////////////////////
+
+camera.position.set(0,2,10);
+
+/////////////////////////
+// バッテリー
+/////////////////////////
+
+const batteries = [];
+
+function createBattery(x,z){
+
+    const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1,1,1),
+        new THREE.MeshStandardMaterial({
+            color:0xffff00,
+            emissive:0xffff00,
+            emissiveIntensity:1
+        })
+    );
+
+    mesh.position.set(x,1,z);
+
+    scene.add(mesh);
+    batteries.push(mesh);
+}
+
+createBattery(-10,-10);
+createBattery(10,-20);
+createBattery(0,-40);
+
+/////////////////////////
+// モンスター
+/////////////////////////
+
+const monster = new THREE.Mesh(
+    new THREE.BoxGeometry(4,6,4),
+    new THREE.MeshStandardMaterial({
+        color:0x0066ff,
+        emissive:0x0033ff,
+        emissiveIntensity:1
+    })
+);
+
+monster.position.set(0,3,-50);
+scene.add(monster);
+
+/////////////////////////
+// ドア
+/////////////////////////
+
+const door = new THREE.Mesh(
+    new THREE.BoxGeometry(6,10,1),
+    new THREE.MeshStandardMaterial({
+        color:0x888888
+    })
+);
+
+door.position.set(0,5,-70);
+scene.add(door);
+
+/////////////////////////
+// 移動
+/////////////////////////
+
+const keys = {};
 let collected = 0;
 let gameOver = false;
 
-const speed = 6;
-const keys = {};
-
-document.addEventListener("keydown", e=>{
+document.addEventListener('keydown', e=>{
     keys[e.key.toLowerCase()] = true;
 });
 
-document.addEventListener("keyup", e=>{
+document.addEventListener('keyup', e=>{
     keys[e.key.toLowerCase()] = false;
 });
 
-function updatePlayer(){
+/////////////////////////
+// UI
+/////////////////////////
 
-    if(gameOver) return;
-
-    if(keys["w"] || keys["arrowup"]) py -= speed;
-    if(keys["s"] || keys["arrowdown"]) py += speed;
-    if(keys["a"] || keys["arrowleft"]) px -= speed;
-    if(keys["d"] || keys["arrowright"]) px += speed;
-
-    px = Math.max(0, Math.min(window.innerWidth - 40, px));
-    py = Math.max(0, Math.min(window.innerHeight - 40, py));
-
-    player.style.left = px + "px";
-    player.style.top = py + "px";
-}
-
-function updateMonster(){
-
-    if(gameOver) return;
-
-    const dx = px - mx;
-    const dy = py - my;
-
-    const dist = Math.sqrt(dx*dx + dy*dy);
-
-    mx += dx / dist * 2;
-    my += dy / dist * 2;
-
-    monster.style.left = mx + "px";
-    monster.style.top = my + "px";
-
-    // 捕まる
-    if(dist < 50){
-        endGame("GAME OVER");
-    }
-}
-
-function checkBatteries(){
-
-    batteries.forEach(b => {
-
-        if(b.style.display === "none") return;
-
-        const bx = b.offsetLeft;
-        const by = b.offsetTop;
-
-        const dist = Math.hypot(px - bx, py - by);
-
-        if(dist < 40){
-            b.style.display = "none";
-            collected++;
-            countText.textContent = collected;
-        }
-    });
-}
-
-function checkDoor(){
-
-    if(collected < 3) return;
-
-    const dx = px - door.offsetLeft;
-    const dy = py - door.offsetTop;
-
-    const dist = Math.hypot(dx, dy);
-
-    if(dist < 100){
-        endGame("YOU ESCAPED!");
-    }
-}
+const msg = document.getElementById("message");
 
 function endGame(text){
+
     gameOver = true;
-    message.style.display = "block";
-    message.innerHTML = text;
+    msg.style.display = "block";
+    msg.innerHTML = text;
 }
 
-function gameLoop(){
-    updatePlayer();
-    updateMonster();
-    checkBatteries();
-    checkDoor();
+/////////////////////////
+// アニメーション
+/////////////////////////
 
-    requestAnimationFrame(gameLoop);
+function animate(){
+
+    requestAnimationFrame(animate);
+
+    if(!gameOver){
+
+        const speed = 0.15;
+
+        if(keys["w"]) controls.moveForward(speed);
+        if(keys["s"]) controls.moveForward(-speed);
+        if(keys["a"]) controls.moveRight(-speed);
+        if(keys["d"]) controls.moveRight(speed);
+
+        /////////////////////////
+        // 懐中電灯
+        /////////////////////////
+
+        flashlight.position.copy(camera.position);
+
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+
+        flashlight.target.position.copy(
+            camera.position.clone().add(dir)
+        );
+
+        /////////////////////////
+        // バッテリー取得
+        /////////////////////////
+
+        batteries.forEach((b,i)=>{
+
+            if(!b.visible) return;
+
+            const dist = camera.position.distanceTo(b.position);
+
+            b.rotation.y += 0.03;
+
+            if(dist < 2){
+
+                b.visible = false;
+                collected++;
+
+                console.log("Battery:", collected);
+            }
+        });
+
+        /////////////////////////
+        // モンスター追跡
+        /////////////////////////
+
+        const direction = new THREE.Vector3()
+            .subVectors(camera.position, monster.position)
+            .normalize();
+
+        monster.position.add(direction.multiplyScalar(0.03));
+
+        monster.lookAt(camera.position);
+
+        const mdist = camera.position.distanceTo(monster.position);
+
+        if(mdist < 3){
+
+            endGame("GAME OVER");
+        }
+
+        /////////////////////////
+        // 脱出
+        /////////////////////////
+
+        if(collected >= 3){
+
+            const ddist = camera.position.distanceTo(door.position);
+
+            if(ddist < 5){
+
+                endGame("YOU ESCAPED!");
+            }
+        }
+    }
+
+    renderer.render(scene, camera);
 }
 
-gameLoop();
+animate();
+
+/////////////////////////
+// リサイズ
+/////////////////////////
+
+window.addEventListener('resize', ()=>{
+
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
 </script>
-
 </body>
 </html>
