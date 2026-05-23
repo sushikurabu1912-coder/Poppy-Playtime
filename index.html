@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Cyber City Trial - Mobile Prototype</title>
+    <title>2D Cyber City Trial - Online Multiplayer</title>
+    <!-- PeerJSのライブラリを読み込み（P2P通信用） -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -16,8 +18,29 @@
             justify-content: center;
             height: 100vh;
             overflow: hidden;
-            touch-action: none; /* スマホのデフォルトスクロールやズームを無効化 */
+            touch-action: none;
         }
+        #connection-panel {
+            margin-bottom: 10px;
+            font-size: 12px;
+            background: rgba(31, 31, 58, 0.8);
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #00ffcc;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        input, button {
+            background: #121224;
+            border: 1px solid #00ffcc;
+            color: #fff;
+            padding: 4px 8px;
+            font-family: monospace;
+        }
+        button:bg { background: #00ffcc; color: #000; }
         #gameContainer {
             position: relative;
             width: 100%;
@@ -38,7 +61,6 @@
             text-align: center;
             z-index: 10;
         }
-        /* スマホ用タッチUIの配置 */
         .touch-control {
             position: absolute;
             border-radius: 50%;
@@ -78,24 +100,25 @@
             font-size: 12px;
             box-shadow: 0 0 10px #ff0055;
         }
-        #action-button:active {
-            background: rgba(255, 0, 85, 0.8);
-        }
     </style>
 </head>
 <body>
 
-    <h1 style="color: #00ffcc; margin: 5px 0; font-size: 20px;">CYBER TRIAL (TOUCH)</h1>
+    <!-- オンライン接続用UI -->
+    <div id="connection-panel">
+        <div>YOUR ID: <span id="my-id" style="color:#00ff55;">Connecting...</span></div>
+        <div>
+            <input type="text" id="peer-id-input" placeholder="ENTER FRIEND ID">
+            <button id="connect-btn">CONNECT</button>
+        </div>
+        <div id="conn-status" style="color:#ff0055;">OFFLINE</div>
+    </div>
     
     <div id="gameContainer">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
-        
-        <!-- バーチャルジョスティック (左側) -->
         <div id="joystick-base" class="touch-control">
             <div id="joystick-stick"></div>
         </div>
-        
-        <!-- スキルボタン (右側) -->
         <div id="action-button" class="touch-control">WAVE</div>
     </div>
     
@@ -107,127 +130,127 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const statsUi = document.getElementById("stats");
+const connStatusUi = document.getElementById("conn-status");
 
-// キー入力の状態管理（PC用）
+// キー入力・ジョイスティック状態管理（前回同様）
 const keys = {};
 window.addEventListener("keydown", e => keys[e.key] = true);
 window.addEventListener("keyup", e => keys[e.key] = false);
 
-// タッチ操作（ジョイスティック）の状態管理
 const joystick = {
     base: document.getElementById("joystick-base"),
     stick: document.getElementById("joystick-stick"),
-    active: false,
-    startX: 0,
-    startY: 0,
-    dirX: 0, // -1 から 1 の値
-    dirY: 0  // -1 から 1 の値
+    active: false, startX: 0, startY: 0, dirX: 0, dirY: 0
 };
 
-// プレイヤーオブジェクト
+// プレイヤー（自分）
 const player = {
-    x: 400,
-    y: 300,
-    radius: 15,
-    baseSpeed: 4,
-    speedItemCount: 0,
-    powerItemCount: 0,
-    waveCooldown: 0,
-    waveActive: false,
-    waveRadius: 0,
-    maxWaveRadius: 100,
-    triggerWave: false // スマホとPC共通のトリガー
+    x: 400, y: 300, radius: 15, baseSpeed: 4,
+    speedItemCount: 0, powerItemCount: 0,
+    waveCooldown: 0, waveActive: false, waveRadius: 0, maxWaveRadius: 100,
+    triggerWave: false
 };
+
+// オンラインの相手プレイヤー情報
+let remotePlayer = null; 
 
 // アイテム（コンテナ）
 let items = [];
 const ITEM_TYPES = ["SPEED", "POWER"];
-
-function spawnItem() {
-    items.push({
-        x: Math.random() * (canvas.width - 40),
-        y: Math.random() * (canvas.height - 40),
+function spawnItem(index, fixedX = null, fixedY = null) {
+    const itemData = {
+        x: fixedX !== null ? fixedX : Math.random() * (canvas.width - 40),
+        y: fixedY !== null ? fixedY : Math.random() * (canvas.height - 40),
         size: 20,
         type: ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)]
+    };
+    if (index !== undefined) items[index] = itemData;
+    else items.push(itemData);
+}
+for (let i = 0; i < 10; i++) spawnItem();
+
+// --- 📡 PeerJS オンライン同期処理 ---
+let peer = new Peer(); 
+let conn = null;
+
+// 自分のIDが発行されたとき
+peer.on('open', (id) => {
+    document.getElementById("my-id").innerText = id;
+});
+
+// 相手から接続されたとき（ホスト側）
+peer.on('connection', (connection) => {
+    conn = connection;
+    setupConnection();
+});
+
+// 自分から相手に接続するとき（ゲスト側）
+document.getElementById("connect-btn").addEventListener("click", () => {
+    const peerId = document.getElementById("peer-id-input").value;
+    if (peerId) {
+        conn = peer.connect(peerId);
+        setupConnection();
+    }
+});
+
+function setupConnection() {
+    conn.on('open', () => {
+        connStatusUi.innerText = "ONLINE";
+        connStatusUi.style.color = "#00ffcc";
+        
+        // 接続完了時、ホスト側のアイテム位置をゲストに強制同期
+        if(peer.id > conn.peer) { 
+            conn.send({ type: 'SYNC_ITEMS', items: items });
+        }
+    });
+
+    // 相手からのデータを受信
+    conn.on('data', (data) => {
+        if (data.type === 'MOVE') {
+            remotePlayer = data.player;
+        }
+        if (data.type === 'SYNC_ITEMS') {
+            items = data.items;
+        }
     });
 }
 
-for (let i = 0; i < 10; i++) spawnItem();
-
-// --- 📱 スマホタッチイベントの実装 ---
-
-// ジョイスティックの処理
+// スマホ操作のイベント登録（前回同様）
 joystick.base.addEventListener("touchstart", e => {
     joystick.active = true;
-    const touch = e.touches[0];
     const rect = joystick.base.getBoundingClientRect();
-    // ベースの中心座標を記憶
     joystick.startX = rect.left + rect.width / 2;
     joystick.startY = rect.top + rect.height / 2;
 });
-
 window.addEventListener("touchmove", e => {
     if (!joystick.active) return;
-    
-    // ジョイスティックに触れている指を特定
     let touch = null;
-    for (let t of e.touches) {
-        if (t.clientX < window.innerWidth / 2) { // 画面左側のタッチをジョイスティックとみなす
-            touch = t;
-            break;
-        }
-    }
+    for (let t of e.touches) { if (t.clientX < window.innerWidth / 2) { touch = t; break; } }
     if (!touch) return;
-
-    // 中心からの距離を計算
     let dx = touch.clientX - joystick.startX;
     let dy = touch.clientY - joystick.startY;
     let distance = Math.sqrt(dx * dx + dy * dy);
-    const maxRadius = 40; // スティックの可動範囲
-
-    if (distance > maxRadius) {
-        dx = (dx / distance) * maxRadius;
-        dy = (dy / distance) * maxRadius;
-        distance = maxRadius;
-    }
-
-    // スティックの視覚的移動 (初期位置のトップ30px, レフト30pxからの差分)
+    const maxRadius = 40;
+    if (distance > maxRadius) { dx = (dx / distance) * maxRadius; dy = (dy / distance) * maxRadius; }
     joystick.stick.style.transform = `translate(${dx}px, ${dy}px)`;
-
-    // 移動方向の割合を-1〜1で抽出
-    joystick.dirX = dx / maxRadius;
-    joystick.dirY = dy / maxRadius;
-}, { passive: false });
-
+    joystick.dirX = dx / maxRadius; joystick.dirY = dy / maxRadius;
+});
 window.addEventListener("touchend", e => {
-    // 左側のタッチがなくなったらジョイスティックをリセット
     let leftTouchActive = false;
-    for (let t of e.touches) {
-        if (t.clientX < window.innerWidth / 2) leftTouchActive = true;
-    }
-    
+    for (let t of e.touches) { if (t.clientX < window.innerWidth / 2) leftTouchActive = true; }
     if (!leftTouchActive) {
-        joystick.active = false;
-        joystick.stick.style.transform = `translate(0px, 0px)`;
-        joystick.dirX = 0;
-        joystick.dirY = 0;
+        joystick.active = false; joystick.stick.style.transform = `translate(0px, 0px)`;
+        joystick.dirX = 0; joystick.dirY = 0;
     }
 });
-
-// WAVEボタンの処理
-const actionButton = document.getElementById("action-button");
-actionButton.addEventListener("touchstart", e => {
-    e.preventDefault(); // 連打時のブラウザズーム対策
-    player.triggerWave = true;
+document.getElementById("action-button").addEventListener("touchstart", e => {
+    e.preventDefault(); player.triggerWave = true;
 });
 
-// 当たり判定チェック（円と四角）
 function checkCollision(circle, rect) {
     let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.size));
     let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.size));
-    let distanceX = circle.x - closestX;
-    let distanceY = circle.y - closestY;
-    return (distanceX * distanceX + distanceY * distanceY) < (circle.radius * circle.radius);
+    return ((circle.x - closestX)**2 + (circle.y - closestY)**2) < (circle.radius**2);
 }
 
 // メインループ
@@ -238,66 +261,60 @@ function gameLoop() {
 }
 
 function update() {
-    // --- 1. 移動処理 (PC/スマホ両対応) ---
     let currentSpeed = player.baseSpeed + (player.speedItemCount * 0.5);
-    let dx = 0;
-    let dy = 0;
+    let dx = 0; let dy = 0;
 
-    // PCキーボード入力
     if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= 1;
     if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += 1;
     if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= 1;
     if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += 1;
 
-    if (dx !== 0 && dy !== 0) {
-        dx *= 0.7071;
-        dy *= 0.7071;
-    }
+    if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
+    if (joystick.active) { dx = joystick.dirX; dy = joystick.dirY; }
 
-    // スマホジョイスティック入力がある場合は上書き
-    if (joystick.active) {
-        dx = joystick.dirX;
-        dy = joystick.dirY;
-    }
-
-    player.x += dx * currentSpeed;
-    player.y += dy * currentSpeed;
-
+    player.x += dx * currentSpeed; player.y += dy * currentSpeed;
     player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
     player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
 
-    // --- 2. スキル（ウェーブ）処理 ---
-    if (keys[" "] || keys["Spacebar"]) {
-        player.triggerWave = true;
-    }
-
+    // WAVE処理
+    if (keys[" "] || keys["Spacebar"]) player.triggerWave = true;
     if (player.triggerWave && player.waveCooldown === 0 && !player.waveActive) {
-        player.waveActive = true;
-        player.waveRadius = player.radius;
-        player.waveCooldown = 120; 
+        player.waveActive = true; player.waveRadius = player.radius; player.waveCooldown = 120; 
     }
-    player.triggerWave = false; // トリガーリセット
+    player.triggerWave = false;
 
     if (player.waveActive) {
         player.waveRadius += 4 + (player.powerItemCount * 0.5);
-        if (player.waveRadius >= player.maxWaveRadius + (player.powerItemCount * 10)) {
-            player.waveActive = false;
-        }
+        if (player.waveRadius >= player.maxWaveRadius + (player.powerItemCount * 10)) player.waveActive = false;
     }
-
     if (player.waveCooldown > 0) player.waveCooldown--;
 
-    // --- 3. アイテム回収 ---
+    // アイテム回収（オンライン時は位置変更を同期）
     for (let i = items.length - 1; i >= 0; i--) {
         if (checkCollision(player, items[i])) {
             if (items[i].type === "SPEED") player.speedItemCount++;
             else if (items[i].type === "POWER") player.powerItemCount++;
-            items.splice(i, 1);
-            spawnItem();
+            
+            spawnItem(i); // 新しい位置にリスポーン
+            
+            // アイテム位置がズレないよう通信相手に即時通知
+            if (conn && conn.open) {
+                conn.send({ type: 'SYNC_ITEMS', items: items });
+            }
         }
     }
 
-    // --- 4. UI更新 ---
+    // 📡 自分のデータを相手に送信
+    if (conn && conn.open) {
+        conn.send({
+            type: 'MOVE',
+            player: {
+                x: player.x, y: player.y, radius: player.radius,
+                waveActive: player.waveActive, waveRadius: player.waveRadius
+            }
+        });
+    }
+
     let cdText = player.waveCooldown > 0 ? `RECHARGING (${Math.ceil(player.waveCooldown/60)}s)` : "READY";
     statsUi.innerHTML = `SPEED: +${player.speedItemCount} | POWER: +${player.powerItemCount} | WAVE: <span style="color: #00ffcc;">${cdText}</span>`;
 }
@@ -305,56 +322,63 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 背景グリッド
-    ctx.strokeStyle = "#1f1f3a";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < canvas.width; x += 40) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-    }
-    for (let y = 0; y < canvas.height; y += 40) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-    }
+    // 背景
+    ctx.strokeStyle = "#1f1f3a"; ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+    for (let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 
     // アイテム
     items.forEach(item => {
         ctx.fillStyle = item.type === "SPEED" ? "#00ffff" : "#ff0055";
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
         ctx.fillRect(item.x, item.y, item.size, item.size);
-        ctx.fillStyle = "#fff";
-        ctx.shadowBlur = 0;
-        ctx.font = "10px sans-serif";
+        ctx.fillStyle = "#fff"; ctx.shadowBlur = 0; ctx.font = "10px sans-serif";
         ctx.fillText(item.type[0], item.x + 6, item.y + 14);
     });
 
-    // ウェーブ
+    // 自分のWAVE
     if (player.waveActive) {
-        ctx.strokeStyle = "rgba(0, 255, 204, 0.5)";
-        ctx.lineWidth = 3;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = "#00ffcc";
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, player.waveRadius, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.5)"; ctx.lineWidth = 3;
+        ctx.shadowBlur = 15; ctx.shadowColor = "#00ffcc";
+        ctx.beginPath(); ctx.arc(player.x, player.y, player.waveRadius, 0, Math.PI * 2); ctx.stroke();
     }
 
-    // プレイヤー
-    ctx.fillStyle = "#00ff55";
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = "#00ff55";
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-    ctx.fill();
+    // 自分プレイヤー（緑）
+    ctx.fillStyle = "#00ff55"; ctx.shadowBlur = 15; ctx.shadowColor = "#00ff55";
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(player.x, player.y, 4, 0, Math.PI * 2); ctx.fill();
 
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, 4, 0, Math.PI * 2);
-    ctx.fill();
+    // 🔴 オンラインの相手プレイヤー（紫）と頭上の【赤い逆三角形】
+    if (remotePlayer) {
+        // 相手のWAVEエフェクト
+        if (remotePlayer.waveActive) {
+            ctx.strokeStyle = "rgba(255, 0, 204, 0.5)"; ctx.lineWidth = 3;
+            ctx.shadowBlur = 15; ctx.shadowColor = "#ff00cc";
+            ctx.beginPath(); ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.waveRadius, 0, Math.PI * 2); ctx.stroke();
+        }
+
+        // 相手本体
+        ctx.fillStyle = "#bd00ff"; ctx.shadowBlur = 15; ctx.shadowColor = "#bd00ff";
+        ctx.beginPath(); ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.radius, 0, Math.PI * 2); ctx.fill();
+
+        // 🔺 頭上の赤い逆三角形 (▼)
+        ctx.fillStyle = "#ff0000";
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#ff0000";
+        ctx.beginPath();
+        let triSize = 8; // 三角形のサイズ
+        let offsetX = remotePlayer.x;
+        let offsetY = remotePlayer.y - remotePlayer.radius - 12; // 頭上から少し浮かせた位置
+        ctx.moveTo(offsetX - triSize, offsetY - triSize); // 左上
+        ctx.lineTo(offsetX + triSize, offsetY - triSize); // 右上
+        ctx.lineTo(offsetX, offsetY + triSize - 4);       // 下の頂点
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0; // シャドウリセット
+    }
 }
 
 gameLoop();
 </script>
-
 </body>
 </html>
