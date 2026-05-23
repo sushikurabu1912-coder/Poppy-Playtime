@@ -2,425 +2,566 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Cyber City Trial - Full Game</title>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シティトライアル風 2Dミニゲーム</title>
     <style>
         body {
             margin: 0;
-            background-color: #0a0a16;
+            background-color: #222;
             color: #fff;
-            font-family: 'Courier New', Courier, monospace;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             overflow: hidden;
-            touch-action: none;
         }
-        #connection-panel {
-            margin-bottom: 10px;
-            font-size: 12px;
-            background: rgba(31, 31, 58, 0.8);
-            padding: 8px;
-            border-radius: 5px;
-            border: 1px solid #00ffcc;
-            display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 8px;
+            overflow: hidden;
         }
-        input, button { background: #121224; border: 1px solid #00ffcc; color: #fff; padding: 4px 8px; font-family: monospace; }
-        button:active { background: #00ffcc; color: #000; }
-        #gameContainer { position: relative; width: 100%; max-width: 800px; aspect-ratio: 4 / 3; }
-        canvas { width: 100%; height: 100%; border: 4px solid #00ffcc; box-shadow: 0 0 20px #00ffcc; background-color: #121224; box-sizing: border-box; }
-        #ui { margin-top: 10px; font-size: 14px; text-align: center; z-index: 10; }
-        .touch-control { position: absolute; border-radius: 50%; opacity: 0.6; z-index: 5; user-select: none; }
-        #joystick-base { bottom: 20px; left: 20px; width: 100px; height: 100px; background: rgba(0, 110, 255, 0.3); border: 2px solid #00ffff; }
-        #joystick-stick { position: absolute; top: 30px; left: 30px; width: 40px; height: 40px; background: #00ffff; border-radius: 50%; }
-        
-        /* 右側のアクションボタン群 */
-        #wave-button { bottom: 100px; right: 20px; width: 70px; height: 70px; background: rgba(255, 0, 85, 0.4); border: 2px solid #ff0055; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; box-shadow: 0 0 10px #ff0055; }
-        #shot-button { bottom: 20px; right: 30px; width: 80px; height: 80px; background: rgba(255, 200, 0, 0.4); border: 2px solid #ffaa00; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; box-shadow: 0 0 10px #ffaa00; }
+        canvas {
+            display: block;
+            background-color: #33a853; /* 草原ベースの街 */
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            pointer-events: none;
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        .hud-panel {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 15px;
+            border-radius: 6px;
+            border: 1px solid #555;
+        }
+        #skill-announcement {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.85);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 2px solid #ffeb3b;
+            text-align: center;
+            font-size: 24px;
+            color: #ffeb3b;
+            animation: fadeOut 4s forwards;
+            pointer-events: none;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; transform: translate(-50%, -60%); }
+        }
     </style>
 </head>
 <body>
 
-    <div id="connection-panel">
-        <div>
-            <input type="text" id="room-id-input" placeholder="ROOM ID">
-            <button id="create-room-btn">CREATE ROOM</button>
-            <button id="join-room-btn">JOIN ROOM</button>
+<div id="gameContainer">
+    <div id="ui-overlay">
+        <div class="hud-panel" id="stats-panel">
+            ⏱️ TIME: <span id="timer">60</span>s<br>
+            🔴 SPEED: <span id="stat-speed">1</span><br>
+            🔵 ACCEL: <span id="stat-accel">1</span><br>
+            🟢 TURN: <span id="stat-turn">1</span>
         </div>
-        <div id="conn-status" style="color:#ff0055;">OFFLINE</div>
+        <div class="hud-panel" id="skill-panel">
+            【Fキー】専用スキル:<br>
+            <span id="skill-name" style="color: #ffeb3b;">抽選中...</span>
+        </div>
     </div>
-    
-    <div id="gameContainer">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
-        <div id="joystick-base" class="touch-control"><div id="joystick-stick"></div></div>
-        <div id="wave-button" class="touch-control">WAVE</div>
-        <div id="shot-button" class="touch-control">SHOT</div>
+    <div id="skill-announcement" id="announce-box">
+        獲得スキル: <span id="announce-name">???</span><br>
+        <span style="font-size: 14px; color: #fff;">[F]キーで発動！</span>
     </div>
-    
-    <div id="ui">
-        <span id="stats" style="color: #ff00ff;">HP: 100 | SPEED: 0 | POWER: 0 | WAVE: READY</span>
-    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+</div>
 
 <script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-const statsUi = document.getElementById("stats");
-const connStatusUi = document.getElementById("conn-status");
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-const keys = {};
-window.addEventListener("keydown", e => keys[e.key] = true);
-window.addEventListener("keyup", e => keys[e.key] = false);
+// --- ゲーム設定 ---
+const MAP_SIZE = 2000; // 広大な街のサイズ
+const GAME_DURATION = 60; // 制限時間（秒）
 
-const joystick = { base: document.getElementById("joystick-base"), stick: document.getElementById("joystick-stick"), active: false, startX: 0, startY: 0, dirX: 0, dirY: 0 };
-
-// ゲーム状態
-let gameState = "PLAY"; // "PLAY" または "GAMEOVER" または "WIN"
-
-// プレイヤー（自分）
+// プレイヤー（マシン）情報
 const player = {
-    x: 400, y: 300, radius: 15, baseSpeed: 4,
-    hp: 100, maxHp: 100, shield: 0, maxShield: 50,
-    speedItemCount: 0, powerItemCount: 0,
-    waveCooldown: 0, waveActive: false, waveRadius: 0, maxWaveRadius: 100,
-    triggerWave: false, triggerShot: false, shotCooldown: 0,
-    isHacked: 0, lastDx: 1, lastDy: 0 // 向いている方向の記憶用
+    x: MAP_SIZE / 2,
+    y: MAP_SIZE / 2,
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    radius: 18,
+    // 基本ステータス
+    baseSpeed: 5,
+    accelRate: 0.4,
+    friction: 0.92,
+    // パッチ強化分
+    patchSpeed: 0,
+    patchAccel: 0,
+    patchTurn: 0,
+    // チャージシステム
+    charge: 0,
+    maxCharge: 100,
+    isCharging: false,
+    dashTimer: 0,
+    // スキル関連
+    skill: null,
+    skillCooldown: 0,
+    invincibleTimer: 0
 };
 
-// 相手プレイヤー
-let remotePlayer = null; 
+// スキルリスト
+const SKILLS = [
+    { id: 'plasma', name: 'プラズマウェーブ', color: '#00ffff', desc: '前方に貫通する電撃弾を放つ！' },
+    { id: 'freeze', name: 'フリーズブリザード', color: '#a3e5ff', desc: '周囲のアイテムを引き寄せ、敵を凍らせる範囲波！' },
+    { id: 'wheel', name: 'ホイールダッシュ', color: '#ff5722', desc: '3秒間、超高速かつ無敵状態で突進する！' }
+];
 
-// オブジェクト群
-let items = [];
-const ITEM_TYPES = ["SPEED", "POWER", "SHIELD"];
-let meteors = []; 
-let bullets = [];       // 自分の弾
-let remoteBullets = []; // 相手の弾
+// 割り当てられたスキルをランダム決定
+player.skill = SKILLS[Math.floor(Math.random() * SKILLS.length)];
+document.getElementById('skill-name').innerText = player.skill.name;
+document.getElementById('skill-name').style.color = player.skill.color;
+document.getElementById('announce-name').innerText = player.skill.name;
+document.getElementById('announce-name').style.color = player.skill.color;
 
-function spawnItem(index, fixedX = null, fixedY = null, fixedType = null) {
-    const itemData = {
-        x: fixedX !== null ? fixedX : Math.random() * (canvas.width - 40),
-        y: fixedY !== null ? fixedY : Math.random() * (canvas.height - 40),
-        size: 20,
-        type: fixedType !== null ? fixedType : ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)]
-    };
-    if (index !== undefined) items[index] = itemData;
-    else items.push(itemData);
-}
-for (let i = 0; i < 12; i++) spawnItem();
+// エンティティ管理
+const items = [];
+const buildings = [];
+const projectiles = [];
+const particles = [];
 
-// メテオ周りのタイマー
-let meteorInterval = setInterval(() => {
-    if (gameState !== "PLAY") return;
-    meteors.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, timer: 90, radius: 45, exploded: false });
-}, 3500);
+// キー入力管理
+const keys = { w: false, a: false, s: false, d: false, Space: false, f: false };
 
-// --- 📡 オンライン同期処理 ---
-let peer = null; let conn = null;
-
-document.getElementById("create-room-btn").addEventListener("click", () => {
-    const roomId = document.getElementById("room-id-input").value.trim();
-    if (!roomId) return alert("部屋IDを入力してください");
-    if (peer) peer.destroy();
-    peer = new Peer(roomId + "-host");
-    connStatusUi.innerText = "WAITING GUEST..."; connStatusUi.style.color = "#ffaa00";
-    peer.on('connection', (connection) => { conn = connection; setupConnection(true); });
-});
-
-document.getElementById("join-room-btn").addEventListener("click", () => {
-    const roomId = document.getElementById("room-id-input").value.trim();
-    if (!roomId) return alert("部屋IDを入力してください");
-    if (peer) peer.destroy();
-    peer = new Peer(roomId + "-guest");
-    connStatusUi.innerText = "CONNECTING..."; connStatusUi.style.color = "#ffff00";
-    peer.on('open', () => { conn = peer.connect(roomId + "-host"); setupConnection(false); });
-});
-
-function setupConnection(isHost) {
-    conn.on('open', () => {
-        connStatusUi.innerText = isHost ? "CONNECTED (HOST)" : "CONNECTED (GUEST)";
-        connStatusUi.style.color = "#00ffcc";
-        if (isHost) conn.send({ type: 'SYNC_ITEMS', items: items });
-    });
-    conn.on('data', (data) => {
-        if (data.type === 'MOVE') remotePlayer = data.player;
-        if (data.type === 'SYNC_ITEMS') items = data.items;
-        if (data.type === 'HACKED') damagePlayer(0, true); // ハッキング効果
-        if (data.type === 'BULLET') remoteBullets.push(data.bullet); // 相手の弾を追加
-        if (data.type === 'DEAD') gameState = "WIN"; // 相手が死んだら自分の勝ち
+// --- 初期配置生成 ---
+// 建物の配置
+for (let i = 0; i < 40; i++) {
+    buildings.push({
+        x: Math.random() * (MAP_SIZE - 200) + 100,
+        y: Math.random() * (MAP_SIZE - 200) + 100,
+        w: Math.random() * 100 + 60,
+        h: Math.random() * 100 + 60
     });
 }
-
-// ダメージ & ハッキング処理
-function damagePlayer(amount, isHacking = false) {
-    if (gameState !== "PLAY") return;
-
-    if (isHacking) {
-        if (player.shield > 0) {
-            player.shield = Math.max(0, player.shield - 25);
-        } else {
-            player.isHacked = 60; // 1秒麻痺
-            // パーツをぶちまける
-            if(player.speedItemCount > 0) { player.speedItemCount--; spawnItem(undefined, player.x + (Math.random()*60-30), player.y + (Math.random()*60-30), "SPEED"); }
-            if(player.powerItemCount > 0) { player.powerItemCount--; spawnItem(undefined, player.x + (Math.random()*60-30), player.y + (Math.random()*60-30), "POWER"); }
-        }
-    } else {
-        // 通常被弾（シールドから削る）
-        if (player.shield > 0) {
-            player.shield -= amount;
-            if (player.shield < 0) { player.hp += player.shield; player.shield = 0; }
-        } else {
-            player.hp -= amount;
-        }
-    }
-
-    // 死亡判定
-    if (player.hp <= 0) {
-        player.hp = 0;
-        gameState = "GAMEOVER";
-        if (conn && conn.open) conn.send({ type: 'DEAD' });
-    }
+// アイテム（パッチ）の配置
+function spawnItem() {
+    const types = ['speed', 'accel', 'turn'];
+    items.push({
+        x: Math.random() * MAP_SIZE,
+        y: Math.random() * MAP_SIZE,
+        type: types[Math.floor(Math.random() * types.length)],
+        radius: 12
+    });
 }
+for (let i = 0; i < 50; i++) spawnItem();
 
-// スマホ操作
-joystick.base.addEventListener("touchstart", e => {
-    joystick.active = true;
-    const rect = joystick.base.getBoundingClientRect();
-    joystick.startX = rect.left + rect.width / 2; joystick.startY = rect.top + rect.height / 2;
-});
-window.addEventListener("touchmove", e => {
-    if (!joystick.active || gameState !== "PLAY") return;
-    let touch = null; for (let t of e.touches) { if (t.clientX < window.innerWidth / 2) { touch = t; break; } }
-    if (!touch) return;
-    let dx = touch.clientX - joystick.startX; let dy = touch.clientY - joystick.startY;
-    let distance = Math.sqrt(dx * dx + dy * dy); const maxRadius = 40;
-    if (distance > maxRadius) { dx = (dx / distance) * maxRadius; dy = (dy / distance) * maxRadius; }
-    joystick.stick.style.transform = `translate(${dx}px, ${dy}px)`;
-    joystick.dirX = dx / maxRadius; joystick.dirY = dy / maxRadius;
-});
-window.addEventListener("touchend", e => {
-    let leftTouchActive = false; for (let t of e.touches) { if (t.clientX < window.innerWidth / 2) leftTouchActive = true; }
-    if (!leftTouchActive) { joystick.active = false; joystick.stick.style.transform = `translate(0px, 0px)`; joystick.dirX = 0; joystick.dirY = 0; }
-});
-document.getElementById("wave-button").addEventListener("touchstart", e => { e.preventDefault(); player.triggerWave = true; });
-document.getElementById("shot-button").addEventListener("touchstart", e => { e.preventDefault(); player.triggerShot = true; });
-
-// リトライ用画面タップ
-canvas.addEventListener("click", () => {
-    if (gameState !== "PLAY") {
-        // ゲームリセット
-        player.hp = 100; player.shield = 0; player.speedItemCount = 0; player.powerItemCount = 0;
-        player.x = 400; player.y = 300; player.isHacked = 0;
-        gameState = "PLAY"; remotePlayer = null; bullets = []; remoteBullets = []; meteors = [];
+// --- キーボードイベント ---
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyW') keys.w = true;
+    if (e.code === 'KeyA') keys.a = true;
+    if (e.code === 'KeyS') keys.s = true;
+    if (e.code === 'KeyD') keys.d = true;
+    if (e.code === 'Space') keys.Space = true;
+    if (e.code === 'KeyF') {
+        if (!keys.f) useSkill();
+        keys.f = true;
     }
 });
+window.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyW') keys.w = false;
+    if (e.code === 'KeyA') keys.a = false;
+    if (e.code === 'KeyS') keys.s = false;
+    if (e.code === 'KeyD') keys.d = false;
+    if (e.code === 'Space') {
+        keys.Space = false;
+        triggerChargeDash();
+    }
+    if (e.code === 'KeyF') keys.f = false;
+});
 
-function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+// --- スキル発動処理 ---
+function useSkill() {
+    if (player.skillCooldown > 0 || timeLeft <= 0) return;
 
-function update() {
-    if (gameState !== "PLAY") return;
-
-    // 移動方向・向きの更新
-    let dx = 0; let dy = 0;
-    if (player.isHacked > 0) {
-        player.isHacked--;
-    } else {
-        let currentSpeed = player.baseSpeed + (player.speedItemCount * 0.5);
-        if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= 1;
-        if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += 1;
-        if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= 1;
-        if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += 1;
-        if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
-        if (joystick.active) { dx = joystick.dirX; dy = joystick.dirY; }
-        
-        player.x += dx * currentSpeed; player.y += dy * currentSpeed;
-        if (dx !== 0 || dy !== 0) {
-            // 向いているベクトルを保存（ショットの射撃方向に使う）
-            let len = Math.sqrt(dx*dx + dy*dy);
-            player.lastDx = dx / len; player.lastDy = dy / len;
+    if (player.skill.id === 'plasma') {
+        // 前方に弾を発射
+        projectiles.push({
+            x: player.x,
+            y: player.y,
+            vx: Math.cos(player.angle) * 15,
+            vy: Math.sin(player.angle) * 15,
+            radius: 15,
+            color: '#00ffff',
+            life: 40
+        });
+        player.skillCooldown = 90; // クールダウン
+    } 
+    else if (player.skill.id === 'freeze') {
+        // 全方位衝撃波
+        for (let angle = 0; angle < Math.PI * 2; angle += 0.4) {
+            projectiles.push({
+                x: player.x,
+                y: player.y,
+                vx: Math.cos(angle) * 6,
+                vy: Math.sin(angle) * 6,
+                radius: 10,
+                color: '#a3e5ff',
+                life: 25
+            });
         }
-    }
-    player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
-    player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
-
-    // 🔫 ショット（攻撃）処理
-    if (keys["z"] || keys["Z"]) player.triggerShot = true;
-    if (player.triggerShot && player.shotCooldown === 0 && player.isHacked === 0) {
-        let b = { x: player.x, y: player.y, vx: player.lastDx * 8, vy: player.lastDy * 8, dmg: 10 + player.powerItemCount * 3 };
-        bullets.push(b);
-        player.shotCooldown = 20; // 連射速度（約0.3秒）
-        if (conn && conn.open) conn.send({ type: 'BULLET', bullet: b }); // 相手に弾丸を同期
-    }
-    player.triggerShot = false;
-    if (player.shotCooldown > 0) player.shotCooldown--;
-
-    // 自分の弾の移動と相手への当たり判定
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        let b = bullets[i]; b.x += b.vx; b.y += b.vy;
-        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
+        player.skillCooldown = 180;
+    } 
+    else if (player.skill.id === 'wheel') {
+        // 無敵超加速突進
+        player.invincibleTimer = 180; // 3秒間無敵＆高速化
+        player.dashTimer = 30; 
+        player.vx = Math.cos(player.angle) * 20;
+        player.vy = Math.sin(player.angle) * 20;
+        player.skillCooldown = 300;
     }
 
-    // 相手の弾の移動と自分への当たり判定
-    for (let i = remoteBullets.length - 1; i >= 0; i--) {
-        let rb = remoteBullets[i]; rb.x += rb.vx; rb.y += rb.vy;
-        let dist = Math.sqrt((player.x - rb.x)**2 + (player.y - rb.y)**2);
-        if (dist < player.radius + 4) {
-            damagePlayer(rb.dmg, false); // 通常ダメージ
-            remoteBullets.splice(i, 1);
-        } else if (rb.x < 0 || rb.x > canvas.width || rb.y < 0 || rb.y > canvas.height) {
-            remoteBullets.splice(i, 1);
-        }
-    }
-
-    // WAVEスキルの処理
-    if (keys[" "] || keys["Spacebar"]) player.triggerWave = true;
-    if (player.triggerWave && player.waveCooldown === 0 && !player.waveActive && player.isHacked === 0) {
-        player.waveActive = true; player.waveRadius = player.radius; player.waveCooldown = 180; 
-    }
-    player.triggerWave = false;
-
-    if (player.waveActive) {
-        player.waveRadius += 5 + (player.powerItemCount * 0.5);
-        let currentMaxW = player.maxWaveRadius + (player.powerItemCount * 15);
-        if (remotePlayer) {
-            let distToEnemy = Math.sqrt((player.x - remotePlayer.x)**2 + (player.y - remotePlayer.y)**2);
-            if (distToEnemy <= player.waveRadius && distToEnemy > player.waveRadius - 10) {
-                if (conn && conn.open) conn.send({ type: 'HACKED' });
-            }
-        }
-        if (player.waveRadius >= currentMaxW) player.waveActive = false;
-    }
-    if (player.waveCooldown > 0) player.waveCooldown--;
-
-    // メテオの処理
-    for (let i = meteors.length - 1; i >= 0; i--) {
-        let m = meteors[i]; m.timer--;
-        if (m.timer === 0 && !m.exploded) {
-            m.exploded = true;
-            let dist = Math.sqrt((player.x - m.x)**2 + (player.y - m.y)**2);
-            if (dist < m.radius + player.radius) damagePlayer(25, true); // メテオはハック＋大ダメ
-        }
-        if (m.timer < -15) meteors.splice(i, 1);
-    }
-
-    // アイテム回収
-    for (let i = items.length - 1; i >= 0; i--) {
-        let closestX = Math.max(items[i].x, Math.min(player.x, items[i].x + items[i].size));
-        let closestY = Math.max(items[i].y, Math.min(player.y, items[i].y + items[i].size));
-        if (((player.x - closestX)**2 + (player.y - closestY)**2) < (player.radius**2)) {
-            if (items[i].type === "SPEED") player.speedItemCount++;
-            else if (items[i].type === "POWER") player.powerItemCount++;
-            else if (items[i].type === "SHIELD") player.shield = Math.min(player.maxShield, player.shield + 25);
-            spawnItem(i);
-            if (conn && conn.open) conn.send({ type: 'SYNC_ITEMS', items: items });
-        }
-    }
-
-    // データ同期
-    if (conn && conn.open) {
-        conn.send({
-            type: 'MOVE',
-            player: { x: player.x, y: player.y, radius: player.radius, waveActive: player.waveActive, waveRadius: player.waveRadius }
+    // 発動エフェクト
+    for (let i = 0; i < 15; i++) {
+        particles.push({
+            x: player.x,
+            y: player.y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            radius: Math.random() * 6 + 2,
+            color: player.skill.color,
+            life: 20
         });
     }
-
-    let cdText = player.waveCooldown > 0 ? `RECHARGING (${Math.ceil(player.waveCooldown/60)}s)` : "READY";
-    statsUi.innerHTML = `HP: <span style="color:#00ff55;">${player.hp}</span> | SHIELD: <span style="color:#00ffff;">${player.shield}</span> | SPEED: +${player.speedItemCount} | POWER: +${player.powerItemCount} | WAVE: ${cdText}`;
 }
 
-function draw() {
+// チャージダッシュ発動
+function triggerChargeDash() {
+    if (player.charge > 10) {
+        const dashPower = (player.charge / 100) * (8 + player.patchAccel * 1.5);
+        player.vx = Math.cos(player.angle) * dashPower;
+        player.vy = Math.sin(player.angle) * dashPower;
+        player.dashTimer = 15;
+        
+        // ダッシュ煙エフェクト
+        for(let i=0; i<10; i++){
+            particles.push({
+                x: player.x, y: player.y,
+                vx: -Math.cos(player.angle)*3 + (Math.random()-0.5)*3,
+                vy: -Math.sin(player.angle)*3 + (Math.random()-0.5)*3,
+                radius: Math.random()*8 + 4, color: '#fff', life: 15
+            });
+        }
+    }
+    player.charge = 0;
+    player.isCharging = false;
+}
+
+// --- タイマー処理 ---
+let timeLeft = GAME_DURATION;
+const timerInterval = setInterval(() => {
+    if (timeLeft > 0) {
+        timeLeft--;
+        document.getElementById('timer').innerText = timeLeft;
+    } else {
+        clearInterval(timerInterval);
+    }
+}, 1000);
+
+// --- メインゲームループ ---
+function update() {
+    if (timeLeft <= 0) return drawEndScreen();
+
+    // クールダウン・タイマーの消化
+    if (player.skillCooldown > 0) player.skillCooldown--;
+    if (player.invincibleTimer > 0) player.invincibleTimer--;
+    if (player.dashTimer > 0) player.dashTimer--;
+
+    // 1. 移動入力の処理
+    let ax = 0;
+    let ay = 0;
+
+    if (keys.Space) {
+        // ブレーキとチャージ蓄積
+        player.isCharging = true;
+        player.vx *= 0.7;
+        player.vy *= 0.7;
+        if (Math.abs(player.vx) + Math.abs(player.vy) < 1) {
+            player.charge = Math.min(player.maxCharge, player.charge + 2 + player.patchTurn * 0.3);
+        }
+    } else {
+        // 通常移動 (WASDによるダイレクト移動)
+        const currentAccel = player.accelRate + (player.patchAccel * 0.1);
+        if (keys.w) ay -= currentAccel;
+        if (keys.s) ay += currentAccel;
+        if (keys.a) ax -= currentAccel;
+        if (keys.d) ax += currentAccel;
+    }
+
+    // ホイールダッシュ中の強制前方移動
+    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') {
+        ax = Math.cos(player.angle) * 1.5;
+        ay = Math.sin(player.angle) * 1.5;
+    }
+
+    // 加速度の適用
+    player.vx += ax;
+    player.vy += ay;
+
+    // 摩擦と最高速度制限
+    if (!keys.w && !keys.s && !keys.a && !keys.d && !keys.Space) {
+        player.vx *= player.friction;
+        player.vy *= player.friction;
+    }
+    
+    let currentMaxSpeed = player.baseSpeed + (player.patchSpeed * 1.5);
+    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') currentMaxSpeed *= 2.0; // ホイール中超高速
+
+    const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+    if (speed > currentMaxSpeed && player.dashTimer <= 0) {
+        player.vx = (player.vx / speed) * currentMaxSpeed;
+        player.vy = (player.vy / speed) * currentMaxSpeed;
+    }
+
+    // 位置の更新
+    player.x += player.vx;
+    player.y += player.vy;
+
+    // プレイヤーの向きを移動方向に滑らかに合わせる
+    if (Math.abs(player.vx) > 0.1 || Math.abs(player.vy) > 0.1) {
+        const targetAngle = Math.atan2(player.vy, player.vx);
+        // 旋回性能パッチ(TURN)に応じて素早く正面を向く
+        const turnSpeed = 0.15 + (player.patchTurn * 0.05);
+        let diff = targetAngle - player.angle;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        player.angle += diff * turnSpeed;
+    }
+
+    // マップ外へのはみ出し防止
+    player.x = Math.max(player.radius, Math.min(MAP_SIZE - player.radius, player.x));
+    player.y = Math.max(player.radius, Math.min(MAP_SIZE - player.radius, player.y));
+
+    // 2. 建造物との当たり判定（簡易壁判定）
+    buildings.forEach(b => {
+        if (player.x + player.radius > b.x && player.x - player.radius < b.x + b.w &&
+            player.y + player.radius > b.y && player.y - player.radius < b.y + b.h) {
+            // めり込み量に応じて位置を押し戻す
+            const fromLeft = player.x - b.x;
+            const fromRight = (b.x + b.w) - player.x;
+            const fromTop = player.y - b.y;
+            const fromBottom = (b.y + b.h) - player.y;
+            const minDist = Math.min(fromLeft, fromRight, fromTop, fromBottom);
+
+            if (minDist === fromLeft) { player.x = b.x - player.radius; player.vx *= -0.5; }
+            else if (minDist === fromRight) { player.x = b.x + b.w + player.radius; player.vx *= -0.5; }
+            else if (minDist === fromTop) { player.y = b.y - player.radius; player.vy *= -0.5; }
+            else if (minDist === fromBottom) { player.y = b.y + b.h + player.radius; player.vy *= -0.5; }
+        }
+    });
+
+    // 3. アイテムの回収判定
+    for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        const dx = player.x - item.x;
+        const dy = player.y - item.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // フリーズブリザード使用時は周囲のアイテムを少し引き寄せる
+        if (player.invincibleTimer > 0 && player.skill.id === 'freeze' && dist < 200) {
+            item.x += (player.x - item.x) * 0.08;
+            item.y += (player.y - item.y) * 0.08;
+        }
+
+        if (dist < player.radius + item.radius) {
+            // パッチ獲得による能力強化
+            if (item.type === 'speed') { player.patchSpeed++; document.getElementById('stat-speed').innerText = player.patchSpeed + 1; }
+            if (item.type === 'accel') { player.patchAccel++; document.getElementById('stat-accel').innerText = player.patchAccel + 1; }
+            if (item.type === 'turn') { player.patchTurn++; document.getElementById('stat-turn').innerText = player.patchTurn + 1; }
+            
+            // キラキラエフェクト
+            for(let p=0; p<5; p++) {
+                particles.push({
+                    x: item.x, y: item.y,
+                    vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4,
+                    radius: Math.random()*4+2,
+                    color: item.type === 'speed' ? '#ff3b30' : item.type === 'accel' ? '#007aff' : '#34c759',
+                    life: 15
+                });
+            }
+            items.splice(i, 1);
+            spawnItem(); // 別の場所に再生成
+        }
+    }
+
+    // 4. 弾とエフェクトの更新
+    projectiles.forEach((p, idx) => {
+        p.x += p.vx; p.y += p.vy; p.life--;
+        if(p.life <= 0) projectiles.splice(idx, 1);
+    });
+    particles.forEach((p, idx) => {
+        p.x += p.vx; p.y += p.vy; p.life--;
+        if(p.life <= 0) particles.splice(idx, 1);
+    });
+
+    // --- 描画処理 ---
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 背景
-    ctx.strokeStyle = "#1f1f3a"; ctx.lineWidth = 1;
-    for (let x = 0; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-    for (let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+    // カメラ座標（プレイヤーが常に画面中心に位置するように）
+    const cameraX = player.x - canvas.width / 2;
+    const cameraY = player.y - canvas.height / 2;
 
-    // メテオ
-    meteors.forEach(m => {
-        if (!m.exploded) {
-            ctx.strokeStyle = `rgba(255, 0, 0, ${0.3 + (90-m.timer)/90 * 0.7})`; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(m.x, m.y, m.radius, 0, Math.PI*2); ctx.stroke();
-            ctx.fillStyle = "rgba(255, 0, 0, 0.1)"; ctx.fill();
-        } else {
-            ctx.fillStyle = "rgba(255, 85, 0, 0.6)"; ctx.beginPath(); ctx.arc(m.x, m.y, m.radius + 10, 0, Math.PI*2); ctx.fill();
-        }
+    ctx.save();
+    ctx.translate(-cameraX, -cameraY);
+
+    // 地面のグリッド線描画
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 2;
+    for (let x = 0; x <= MAP_SIZE; x += 100) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); ctx.stroke();
+    }
+    for (let y = 0; y <= MAP_SIZE; y += 100) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
+    }
+
+    // 建造物の描画
+    ctx.fillStyle = '#7a7a7a';
+    buildings.forEach(b => {
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
     });
 
-    // アイテム
+    // アイテム（パッチ）の描画
     items.forEach(item => {
-        ctx.fillStyle = item.type === "SPEED" ? "#00ffff" : item.type === "POWER" ? "#ff0055" : "#00ff55";
-        ctx.fillRect(item.x, item.y, item.size, item.size);
-        ctx.fillStyle = "#fff"; ctx.font = "10px sans-serif"; ctx.fillText(item.type[0], item.x + 6, item.y + 14);
+        ctx.beginPath();
+        ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
+        ctx.fillStyle = item.type === 'speed' ? '#ff3b30' : item.type === 'accel' ? '#007aff' : '#34c759';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+        
+        // パッチ内の簡易模様
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(item.type[0].toUpperCase(), item.x, item.y);
     });
 
-    // 弾丸の描画 (自分: 黄色, 相手: 紫)
-    ctx.fillStyle = "#ffaa00"; bullets.forEach(b => ctx.fillRect(b.x-2, b.y-2, 4, 4));
-    ctx.fillStyle = "#bd00ff"; remoteBullets.forEach(rb => ctx.fillRect(rb.x-2, rb.y-2, 4, 4));
+    // 攻撃弾の描画
+    projectiles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+    });
 
-    // 自分のWAVE
-    if (player.waveActive) {
-        ctx.strokeStyle = "rgba(0, 255, 204, 0.6)"; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(player.x, player.y, player.waveRadius, 0, Math.PI * 2); ctx.stroke();
+    // パーティクルの描画
+    particles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+    });
+
+    // プレイヤー（マシン）の描画
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+
+    // チャージ中や無敵中のオーラ表現
+    if (player.isCharging) {
+        ctx.beginPath();
+        ctx.arc(0, 0, player.radius + (player.charge/4), 0, Math.PI*2);
+        ctx.fillStyle = `rgba(255, 235, 59, ${player.charge / 150})`;
+        ctx.fill();
+    }
+    if (player.invincibleTimer > 0) {
+        ctx.beginPath();
+        ctx.arc(0, 0, player.radius + 6, 0, Math.PI*2);
+        ctx.strokeStyle = player.skill.color;
+        ctx.lineWidth = 3;
+        ctx.stroke();
     }
 
-    // 自分プレイヤー
-    ctx.fillStyle = player.isHacked > 0 && Math.floor(player.isHacked/5)%2===0 ? "#ff0000" : "#00ff55";
-    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2); ctx.fill();
-    
-    // 照準線（自分が向いている方向）
-    ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(player.x + player.lastDx*30, player.y + player.lastDy*30); ctx.stroke();
+    // 機体本体（ピンクの星型円盤をイメージ）
+    ctx.beginPath();
+    ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff8da1';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
 
-    // 相手プレイヤーと頭上の▼
-    if (remotePlayer) {
-        if (remotePlayer.waveActive) {
-            ctx.strokeStyle = "rgba(255, 0, 204, 0.5)"; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.waveRadius, 0, Math.PI * 2); ctx.stroke();
-        }
-        ctx.fillStyle = "#bd00ff"; ctx.beginPath(); ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.radius, 0, Math.PI * 2); ctx.fill();
+    // 前方がわかるような目印（コックピット窓風）
+    ctx.fillStyle = '#333';
+    ctx.fillRect(5, -6, 8, 12);
 
-        ctx.fillStyle = "#ff0000"; ctx.beginPath();
-        let tSize = 8; let ox = remotePlayer.x; let oy = remotePlayer.y - remotePlayer.radius - 12;
-        ctx.moveTo(ox - tSize, oy - tSize); ctx.lineTo(ox + tSize, oy - tSize); ctx.lineTo(ox, oy + tSize - 4);
-        ctx.closePath(); ctx.fill();
+    ctx.restore();
 
-        // 画面外レーダー
-        if (remotePlayer.x < 0 || remotePlayer.x > canvas.width || remotePlayer.y < 0 || remotePlayer.y > canvas.height) {
-            ctx.fillStyle = "#ff0000"; ctx.beginPath();
-            ctx.arc(Math.max(20, Math.min(canvas.width - 20, remotePlayer.x)), Math.max(20, Math.min(canvas.height - 20, remotePlayer.y)), 8, 0, Math.PI * 2);
-            ctx.fill();
-        }
+    // チャージメーター（プレイヤーの頭上に表示）
+    if (player.isCharging && player.charge > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(player.x - 25, player.y - 35, 50, 6);
+        ctx.fillStyle = '#ffeb3b';
+        ctx.fillRect(player.x - 25, player.y - 35, (player.charge / player.maxCharge) * 50, 6);
+    }
+    // スキルのリロードインジケーター（足元）
+    if (player.skillCooldown > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(player.x - 20, player.y + 28, 40, 4);
+        ctx.fillStyle = '#ff3b30';
+        ctx.fillRect(player.x - 20, player.y + 28, (player.skillCooldown / 300) * 40, 4);
     }
 
-    // 💀 ゲームオーバー / クリアの画面描画
-    if (gameState !== "PLAY") {
-        ctx.fillStyle = "rgba(10, 10, 22, 0.85)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        ctx.font = "bold 40px Courier New";
-        ctx.textAlign = "center";
-        
-        if (gameState === "GAMEOVER") {
-            ctx.fillStyle = "#ff0055";
-            ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
-        } else if (gameState === "WIN") {
-            ctx.fillStyle = "#00ffcc";
-            ctx.fillText("VICTORY!", canvas.width / 2, canvas.height / 2 - 20);
-        }
-        
-        ctx.font = "16px Courier New";
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(`STATS - SPEED: +${player.speedItemCount} | POWER: +${player.powerItemCount}`, canvas.width / 2, canvas.height / 2 + 30);
-        ctx.fillStyle = "#888";
-        ctx.fillText("CLICK TO RESTART", canvas.width / 2, canvas.height / 2 + 70);
-        ctx.textAlign = "left"; // 元に戻す
-    }
+    ctx.restore();
+
+    requestAnimationFrame(update);
 }
 
-gameLoop();
+// --- リザルト画面表示 ---
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffeb3b';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚡ タイムアップ！ ⚡', canvas.width / 2, canvas.height / 2 - 100);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px sans-serif';
+    ctx.fillText(`最終スキル: ${player.skill.name}`, canvas.width / 2, canvas.height / 2 - 40);
+    
+    ctx.font = '20px sans-serif';
+    ctx.fillStyle = '#ff3b30'; ctx.fillText(`🔴 最高速(SPEED)パッチ: +${player.patchSpeed}`, canvas.width / 2, canvas.height / 2 + 10);
+    ctx.fillStyle = '#007aff'; ctx.fillText(`🔵 加速度(ACCEL)パッチ: +${player.patchAccel}`, canvas.width / 2, canvas.height / 2 + 45);
+    ctx.fillStyle = '#34c759'; ctx.fillText(`🟢 旋回力(TURN)パッチ : +${player.patchTurn}`, canvas.width / 2, canvas.height / 2 + 80);
+
+    ctx.fillStyle = '#aaa';
+    ctx.font = '16px sans-serif';
+    ctx.fillText('画面をリロード(F5)すると、別のスキルで再挑戦できます。', canvas.width / 2, canvas.height / 2 + 150);
+}
+
+// ループ開始
+requestAnimationFrame(update);
 </script>
+
 </body>
 </html>
