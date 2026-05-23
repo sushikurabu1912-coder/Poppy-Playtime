@@ -69,7 +69,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             border-radius: 8px;
             overflow: hidden;
-            display: none; /* 接続完了まで非表示 */
+            display: none;
         }
         canvas {
             display: block;
@@ -109,7 +109,7 @@
 </head>
 <body>
 
-<!-- マッチングロビー画面 -->
+<!-- ロビー画面 -->
 <div id="lobby">
     <h2>⚔️ オンラインロビー ⚔️</h2>
     
@@ -131,9 +131,9 @@
 </div>
 
 <!-- ゲーム画面 -->
-<!-- （※ゲーム画面のUI、Canvas構成は前回と同様です） -->
 <div id="gameContainer">
     <div id="ui-overlay">
+        <!-- 自分 -->
         <div class="hud-panel">
             <span style="color:#ff8da1;">▼ プレイヤー (あなた)</span><br>
             HP
@@ -142,9 +142,11 @@
             <div class="bar-container"><div id="my-shield" class="shield-bar"></div></div>
             <span style="font-size:12px; color:#aaa;">🔴S:<span id="s-p">1</span> 🔵A:<span id="a-p">1</span> 🟢T:<span id="t-p">1</span></span>
         </div>
+        <!-- タイム -->
         <div class="hud-panel" style="text-align: center; min-width: 100px;">
             ⏱️ TIME<br><span id="timer" style="font-size:24px; color:#ffeb3b;">60</span>s
         </div>
+        <!-- 相手 -->
         <div class="hud-panel" style="text-align: right;">
             <span style="color:#ffcc00;">▼ ライバル (通信相手)</span><br>
             HP
@@ -169,80 +171,50 @@ let currentRoomId = "";
 
 const statusEl = document.getElementById('connection-status');
 
-// 【修正】部屋を作る（ホスト側）
+// 部屋作成
 document.getElementById('create-btn').addEventListener('click', () => {
     const roomId = document.getElementById('my-room-id').value.trim();
-    if (!roomId) {
-        statusEl.innerText = "部屋コードを入力してください。";
-        statusEl.classList.add('error-msg');
-        return;
-    }
-
-    statusEl.classList.remove('error-msg');
+    if (!roomId) { return statusEl.innerText = "部屋コードを入力してください。"; }
     statusEl.innerText = "部屋をチェック中...";
-
-    // 以前の接続があれば初期化
     if (peer) peer.destroy();
 
-    // 自分で決めたID（部屋コード）を指定してPeerインスタンスを作成
     peer = new Peer(roomId);
     currentRoomId = roomId;
 
-    // 部屋作成に成功したとき
     peer.on('open', (id) => {
         isHost = true;
         statusEl.innerHTML = `部屋「<span style='color:#34c759;'>${id}</span>」を作成しました！<br>友達の入室を待っています...`;
     });
-
-    // 参加者が入室してきたとき
     peer.on('connection', (connection) => {
         if (conn) return; 
         conn = connection;
         setupChat();
     });
-
-    // エラーハンドリング（重複チェックなど）
     peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
-            statusEl.innerText = `エラー：コード「${currentRoomId}」はすでに使用されています。別のコードにしてください。`;
-            statusEl.classList.add('error-msg');
-        } else {
-            statusEl.innerText = "通信エラーが発生しました: " + err.type;
-            statusEl.classList.add('error-msg');
+            statusEl.innerText = `エラー：コード「${currentRoomId}」はすでに使用されています。`;
         }
     });
 });
 
-// 【修正】部屋に入る（ゲスト側）
+// 部屋入室
 document.getElementById('connect-btn').addEventListener('click', () => {
     const targetId = document.getElementById('join-room-id').value.trim();
-    if (!targetId) {
-        statusEl.innerText = "相手の部屋コードを入力してください。";
-        statusEl.classList.add('error-msg');
-        return;
-    }
-
-    statusEl.classList.remove('error-msg');
+    if (!targetId) { return statusEl.innerText = "相手の部屋コードを入力してください。"; }
     statusEl.innerText = "接続中...";
-
     if (peer) peer.destroy();
 
-    // ゲスト側はランダムなIDでPeerを立ち上げて、ホストにシームレスに繋ぐ
     peer = new Peer();
-    
     peer.on('open', () => {
         conn = peer.connect(targetId);
         isHost = false;
         setupChat();
     });
-
     peer.on('error', (err) => {
-        statusEl.innerText = "接続に失敗しました。コードが正しいか確認してください。";
-        statusEl.classList.add('error-msg');
+        statusEl.innerText = "接続に失敗しました。コードを確認してください。";
     });
 });
 
-// 通信イベント・同期設定（前回のベースを維持）
 function setupChat() {
     conn.on('open', () => {
         document.getElementById('lobby').style.display = 'none';
@@ -256,8 +228,10 @@ function setupChat() {
             enemy.hp = data.hp; enemy.shield = data.shield;
             enemy.isCharging = data.isCharging; enemy.charge = data.charge;
             enemy.invincibleTimer = data.invincibleTimer;
+            enemy.skillId = data.skillId; // 相手のスキル状態を同期
         }
         if (data.type === 'shoot') {
+            // 相手が撃った弾を「敵の弾(isEnemy: true)」として追加
             projectiles.push({
                 x: data.x, y: data.y, vx: data.vx, vy: data.vy,
                 radius: data.radius, color: data.color, life: data.life, isEnemy: true
@@ -270,7 +244,7 @@ function setupChat() {
     });
 }
 
-// --- ゲームロジック（※前回と共通、シード値生成のみ今回のIDに最適化） ---
+// --- ゲームオブジェクト設定 ---
 const MAP_SIZE = 2000; 
 let timeLeft = 60;
 
@@ -283,7 +257,12 @@ const player = {
     skill: null, skillCooldown: 0, invincibleTimer: 0
 };
 
-const enemy = { x: 0, y: 0, angle: 0, radius: 18, hp: 100, shield: 100, isCharging: false, charge: 0, invincibleTimer: 0 };
+const enemy = { 
+    x: 0, y: 0, angle: 0, radius: 18, 
+    hp: 100, shield: 100, isCharging: false, charge: 0, 
+    invincibleTimer: 0, skillId: null 
+};
+
 const SKILLS = [
     { id: 'plasma', name: 'プラズマウェーブ', color: '#00ffff' },
     { id: 'freeze', name: 'フリーズブリザード', color: '#a3e5ff' },
@@ -293,11 +272,9 @@ const items = []; const buildings = []; const projectiles = []; const keys = { w
 
 function generateMap() {
     buildings.length = 0;
-    // 接続している部屋コードを元に、お互い同じマップを生成するシード値を決定
     let seed = isHost ? currentRoomId : conn.peer;
     let num = 0;
-    if (seed) { for(let i=0; i<seed.length; i++) num += seed.charCodeAt(i); }
-    else { num = 12345; }
+    if (seed) { for(let i=0; i<seed.length; i++) num += seed.charCodeAt(i); } else { num = 12345; }
     
     for (let i = 0; i < 40; i++) {
         num = (num * 9301 + 49297) % 233280; let rand1 = num / 233280;
@@ -335,7 +312,6 @@ function startTimer() {
     }, 1000);
 }
 
-// 操作と当たり判定のロジック（※変更なし）
 window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyW') keys.w = true; if (e.code === 'KeyS') keys.s = true;
     if (e.code === 'KeyA') keys.a = true; if (e.code === 'KeyD') keys.d = true;
@@ -349,25 +325,34 @@ window.addEventListener('keyup', (e) => {
     if (e.code === 'KeyF') keys.f = false;
 });
 
+// --- スキルの発動と通信送信 ---
 function useSkill() {
     if (player.skillCooldown > 0 || timeLeft <= 0 || player.hp <= 0) return;
     let pData = null;
+
     if (player.skill.id === 'plasma') {
-        pData = { x: player.x, y: player.y, vx: Math.cos(player.angle) * 14, vy: Math.sin(player.angle) * 14, radius: 14, color: '#00ffff', life: 40 };
+        // 前方に強力な高速弾を発射（直撃30ダメ）
+        pData = { x: player.x, y: player.y, vx: Math.cos(player.angle) * 16, vy: Math.sin(player.angle) * 16, radius: 14, color: '#00ffff', life: 40, damage: 30 };
         projectiles.push({...pData, isEnemy: false});
         if(conn) conn.send({type: 'shoot', ...pData});
-        player.skillCooldown = 80;
-    } else if (player.skill.id === 'freeze') {
-        for (let angle = 0; angle < Math.PI * 2; angle += 0.5) {
-            pData = { x: player.x, y: player.y, vx: Math.cos(angle) * 6, vy: Math.sin(angle) * 6, radius: 10, color: '#a3e5ff', life: 25 };
+        player.skillCooldown = 60;
+    } 
+    else if (player.skill.id === 'freeze') {
+        // 全方位に吹雪を拡散（1発15ダメ）
+        for (let angle = 0; angle < Math.PI * 2; angle += 0.6) {
+            pData = { x: player.x, y: player.y, vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7, radius: 10, color: '#a3e5ff', life: 30, damage: 15 };
             projectiles.push({...pData, isEnemy: false});
             if(conn) conn.send({type: 'shoot', ...pData});
         }
-        player.skillCooldown = 150;
-    } else if (player.skill.id === 'wheel') {
-        player.invincibleTimer = 150; player.dashTimer = 40; 
-        player.vx = Math.cos(player.angle) * 18; player.vy = Math.sin(player.angle) * 18;
-        player.skillCooldown = 260;
+        player.skillCooldown = 120;
+    } 
+    else if (player.skill.id === 'wheel') {
+        // ホイール化：高速突進＆無敵化（体当たり判定はupdate内で処理）
+        player.invincibleTimer = 100; 
+        player.dashTimer = 35; 
+        player.vx = Math.cos(player.angle) * 22; 
+        player.vy = Math.sin(player.angle) * 22;
+        player.skillCooldown = 200;
     }
 }
 
@@ -379,12 +364,19 @@ function triggerChargeDash() {
     player.charge = 0; player.isCharging = false;
 }
 
+// 【重要】自分自身が受けるダメージの計算
 function damagePlayer(amount) {
-    if (player.invincibleTimer > 0) return;
+    if (player.invincibleTimer > 0 || player.hp <= 0) return; // 無敵中や死亡時は無効
+    
     if (player.shield > 0) {
         player.shield -= amount;
-        if (player.shield < 0) { player.hp += player.shield; player.shield = 0; }
-    } else { player.hp -= amount; }
+        if (player.shield < 0) {
+            player.hp += player.shield; // シールドを超えた分をHPから引く
+            player.shield = 0;
+        }
+    } else {
+        player.hp -= amount;
+    }
     player.hp = Math.max(0, player.hp);
 }
 
@@ -438,6 +430,20 @@ function update() {
         player.angle += diff * turnSpeed;
     }
 
+    // 【新規】ホイールダッシュによる「体当たり」当たり判定
+    // 相手がホイールスキル中かつ、自分との距離が衝突半径以下の場合、大ダメージを受ける
+    if (enemy.invincibleTimer > 0 && enemy.skillId === 'wheel') {
+        let edx = player.x - enemy.x;
+        let edy = player.y - enemy.y;
+        let dist = Math.sqrt(edx * edx + edy * edy);
+        if (dist < player.radius + enemy.radius) {
+            damagePlayer(1.5); // 多段ヒットするためフレーム毎に少しずつ削る
+            // 吹き飛ばし演出（ノックバック）
+            player.vx += (edx / dist) * 2;
+            player.vy += (edy / dist) * 2;
+        }
+    }
+
     buildings.forEach(b => {
         if (player.x + player.radius > b.x && player.x - player.radius < b.x + b.w && player.y + player.radius > b.y && player.y - player.radius < b.y + b.h) {
             const fL = player.x - b.x, fR = (b.x + b.w) - player.x, fT = player.y - b.y, fB = (b.y + b.h) - player.y; const m = Math.min(fL, fR, fT, fB);
@@ -459,25 +465,37 @@ function update() {
         }
     }
 
+    // 【新規】弾の当たり判定処理
     projectiles.forEach((p, idx) => {
         p.x += p.vx; p.y += p.vy; p.life--;
+        
         if (p.isEnemy) {
-            let dx = player.x - p.x, dy = player.y - p.y;
-            if (Math.sqrt(dx * dx + dy * dy) < player.radius + p.radius) { damagePlayer(20); projectiles.splice(idx, 1); return; }
+            let dx = player.x - p.x;
+            let dy = player.y - p.y;
+            // 敵の弾が自分の体にぶつかったか
+            if (Math.sqrt(dx * dx + dy * dy) < player.radius + p.radius) {
+                damagePlayer(p.damage || 20); // 設定されたダメージ分削る
+                projectiles.splice(idx, 1); // 弾を消滅させる
+                return;
+            }
         }
         if(p.life <= 0) projectiles.splice(idx, 1);
     });
 
+    // 自分のデータを相手に送信（スキルIDも追加）
     if (conn && conn.open) {
         conn.send({
             type: 'sync', x: player.x, y: player.y, angle: player.angle, hp: player.hp, shield: player.shield,
-            isCharging: player.isCharging, charge: player.charge, invincibleTimer: player.invincibleTimer
+            isCharging: player.isCharging, charge: player.charge, invincibleTimer: player.invincibleTimer,
+            skillId: player.skill.id
         });
     }
 
+    // UIゲージのリアルタイム更新
     document.getElementById('my-hp').style.width = player.hp + '%'; document.getElementById('my-shield').style.width = player.shield + '%';
     document.getElementById('enemy-hp').style.width = enemy.hp + '%'; document.getElementById('enemy-shield').style.width = enemy.shield + '%';
 
+    // 描画処理
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const cameraX = player.x - canvas.width / 2; const cameraY = player.y - canvas.height / 2;
     ctx.save(); ctx.translate(-cameraX, -cameraY);
@@ -493,13 +511,19 @@ function update() {
     });
     projectiles.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill(); });
 
+    // 自分
     ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
     if (player.isCharging) { ctx.beginPath(); ctx.arc(0, 0, player.radius + (player.charge/3), 0, Math.PI*2); ctx.fillStyle = 'rgba(255,235,59,0.3)'; ctx.fill(); }
+    // ホイールスキル中のオーラ演出
+    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') { ctx.beginPath(); ctx.arc(0, 0, player.radius + 6, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,87,34,0.4)'; ctx.fill(); }
     ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI * 2); ctx.fillStyle = '#ff8da1'; ctx.fill();
     ctx.fillStyle = '#333'; ctx.fillRect(5, -6, 8, 12); ctx.restore();
 
+    // 相手
     ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(enemy.angle);
     if (enemy.isCharging) { ctx.beginPath(); ctx.arc(0, 0, enemy.radius + (enemy.charge/3), 0, Math.PI*2); ctx.fillStyle = 'rgba(30,144,255,0.3)'; ctx.fill(); }
+    // 相手がホイールスキル中のオーラ演出
+    if (enemy.invincibleTimer > 0 && enemy.skillId === 'wheel') { ctx.beginPath(); ctx.arc(0, 0, enemy.radius + 6, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,87,34,0.4)'; ctx.fill(); }
     ctx.beginPath(); ctx.arc(0, 0, enemy.radius, 0, Math.PI * 2); ctx.fillStyle = '#ffcc00'; ctx.fill();
     ctx.fillStyle = '#333'; ctx.fillRect(5, -6, 8, 12); ctx.restore();
 
