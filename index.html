@@ -3,201 +3,358 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Air Ride Prototype</title>
+    <title>2D Cyber City Trial - Mobile Prototype</title>
     <style>
         body {
             margin: 0;
-            padding: 0;
-            background: #222;
+            background-color: #0a0a16;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
             overflow: hidden;
-            font-family: sans-serif;
-            user-select: none;
-            -webkit-user-select: none;
+            touch-action: none; /* スマホのデフォルトスクロールやズームを無効化 */
         }
-        #canvas {
-            display: block;
-            background: linear-gradient(to bottom, #87CEEB, #E0F6FF);
-            margin: 0 auto;
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 4 / 3;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            border: 4px solid #00ffcc;
+            box-shadow: 0 0 20px #00ffcc;
+            background-color: #121224;
+            box-sizing: border-box;
         }
         #ui {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: #333;
-            font-weight: bold;
-            background: rgba(255,255,255,0.8);
-            padding: 10px;
-            border-radius: 5px;
-            pointer-events: none;
-        }
-        #instructions {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
+            margin-top: 10px;
+            font-size: 14px;
             text-align: center;
-            color: white;
-            font-size: 18px;
-            text-shadow: 1px 1px 3px black;
-            pointer-events: none;
+            z-index: 10;
+        }
+        /* スマホ用タッチUIの配置 */
+        .touch-control {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.6;
+            z-index: 5;
+            user-select: none;
+        }
+        #joystick-base {
+            bottom: 20px;
+            left: 20px;
+            width: 100px;
+            height: 100px;
+            background: rgba(0, 110, 255, 0.3);
+            border: 2px solid #00ffff;
+        }
+        #joystick-stick {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            width: 40px;
+            height: 40px;
+            background: #00ffff;
+            border-radius: 50%;
+        }
+        #action-button {
+            bottom: 30px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 0, 85, 0.4);
+            border: 2px solid #ff0055;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #fff;
+            font-size: 12px;
+            box-shadow: 0 0 10px #ff0055;
+        }
+        #action-button:active {
+            background: rgba(255, 0, 85, 0.8);
         }
     </style>
 </head>
 <body>
 
-    <div id="ui">
-        SPEED: <span id="speed-text">0</span><br>
-        CHARGE: <span id="charge-text">0%</span>
+    <h1 style="color: #00ffcc; margin: 5px 0; font-size: 20px;">CYBER TRIAL (TOUCH)</h1>
+    
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <!-- バーチャルジョスティック (左側) -->
+        <div id="joystick-base" class="touch-control">
+            <div id="joystick-stick"></div>
+        </div>
+        
+        <!-- スキルボタン (右側) -->
+        <div id="action-button" class="touch-control">WAVE</div>
     </div>
-    <div id="instructions">画面を長押しで「プッシュ（減速＆チャージ）」 / 離して「ダッシュ」</div>
-    <canvas id="canvas"></canvas>
+    
+    <div id="ui">
+        <span id="stats" style="color: #ff00ff;">SPEED: 0 | POWER: 0 | WAVE CD: READY</span>
+    </div>
 
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const statsUi = document.getElementById("stats");
 
-// 画面サイズ設定（スマホ対応）
-canvas.width = window.innerWidth > 800 ? 800 : window.innerWidth;
-canvas.height = window.innerHeight > 450 ? 450 : window.innerHeight;
+// キー入力の状態管理（PC用）
+const keys = {};
+window.addEventListener("keydown", e => keys[e.key] = true);
+window.addEventListener("keyup", e => keys[e.key] = false);
 
-// ゲームの状態・定数
-const GRAVITY = 0.4;
-const TARGET_HOVER_HEIGHT = 60; // 目標とする地面からの浮遊高さ
-const HOVER_SPRING = 0.08;      // ホバーの反発強さ
-
-// マシーン（プレイヤー）のデータ
-const player = {
-    x: 100,
-    y: 200,
-    vx: 5,         // 前進速度（自動走行）
-    vy: 0,
-    width: 40,
-    height: 20,
-    isPushing: false,
-    charge: 0,
-    maxCharge: 100
+// タッチ操作（ジョイスティック）の状態管理
+const joystick = {
+    base: document.getElementById("joystick-base"),
+    stick: document.getElementById("joystick-stick"),
+    active: false,
+    startX: 0,
+    startY: 0,
+    dirX: 0, // -1 から 1 の値
+    dirY: 0  // -1 から 1 の値
 };
 
-// 簡単な地形データ（地面の高さの配列）
-const groundY = canvas.height - 80;
-function getGroundHeight(x) {
-    // 凸凹の坂道をサイン波で再現
-    return groundY + Math.sin(x * 0.005) * 40 + Math.cos(x * 0.01) * 20;
+// プレイヤーオブジェクト
+const player = {
+    x: 400,
+    y: 300,
+    radius: 15,
+    baseSpeed: 4,
+    speedItemCount: 0,
+    powerItemCount: 0,
+    waveCooldown: 0,
+    waveActive: false,
+    waveRadius: 0,
+    maxWaveRadius: 100,
+    triggerWave: false // スマホとPC共通のトリガー
+};
+
+// アイテム（コンテナ）
+let items = [];
+const ITEM_TYPES = ["SPEED", "POWER"];
+
+function spawnItem() {
+    items.push({
+        x: Math.random() * (canvas.width - 40),
+        y: Math.random() * (canvas.height - 40),
+        size: 20,
+        type: ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)]
+    });
 }
 
-// 入力イベント（マウス＆スマホのタップに対応）
-function startPush() { player.isPushing = true; }
-function endPush() {
-    if (player.isPushing) {
-        // チャージ量に応じてダッシュ
-        player.vx += (player.charge / 100) * 8;
-        player.isPushing = false;
+for (let i = 0; i < 10; i++) spawnItem();
+
+// --- 📱 スマホタッチイベントの実装 ---
+
+// ジョイスティックの処理
+joystick.base.addEventListener("touchstart", e => {
+    joystick.active = true;
+    const touch = e.touches[0];
+    const rect = joystick.base.getBoundingClientRect();
+    // ベースの中心座標を記憶
+    joystick.startX = rect.left + rect.width / 2;
+    joystick.startY = rect.top + rect.height / 2;
+});
+
+window.addEventListener("touchmove", e => {
+    if (!joystick.active) return;
+    
+    // ジョイスティックに触れている指を特定
+    let touch = null;
+    for (let t of e.touches) {
+        if (t.clientX < window.innerWidth / 2) { // 画面左側のタッチをジョイスティックとみなす
+            touch = t;
+            break;
+        }
     }
-}
+    if (!touch) return;
 
-window.addEventListener('mousedown', startPush);
-window.addEventListener('mouseup', endPush);
-window.addEventListener('touchstart', (e) => { e.preventDefault(); startPush(); }, {passive: false});
-window.addEventListener('touchend', (e) => { e.preventDefault(); endPush(); }, {passive: false});
+    // 中心からの距離を計算
+    let dx = touch.clientX - joystick.startX;
+    let dy = touch.clientY - joystick.startY;
+    let distance = Math.sqrt(dx * dx + dy * dy);
+    const maxRadius = 40; // スティックの可動範囲
+
+    if (distance > maxRadius) {
+        dx = (dx / distance) * maxRadius;
+        dy = (dy / distance) * maxRadius;
+        distance = maxRadius;
+    }
+
+    // スティックの視覚的移動 (初期位置のトップ30px, レフト30pxからの差分)
+    joystick.stick.style.transform = `translate(${dx}px, ${dy}px)`;
+
+    // 移動方向の割合を-1〜1で抽出
+    joystick.dirX = dx / maxRadius;
+    joystick.dirY = dy / maxRadius;
+}, { passive: false });
+
+window.addEventListener("touchend", e => {
+    // 左側のタッチがなくなったらジョイスティックをリセット
+    let leftTouchActive = false;
+    for (let t of e.touches) {
+        if (t.clientX < window.innerWidth / 2) leftTouchActive = true;
+    }
+    
+    if (!leftTouchActive) {
+        joystick.active = false;
+        joystick.stick.style.transform = `translate(0px, 0px)`;
+        joystick.dirX = 0;
+        joystick.dirY = 0;
+    }
+});
+
+// WAVEボタンの処理
+const actionButton = document.getElementById("action-button");
+actionButton.addEventListener("touchstart", e => {
+    e.preventDefault(); // 連打時のブラウザズーム対策
+    player.triggerWave = true;
+});
+
+// 当たり判定チェック（円と四角）
+function checkCollision(circle, rect) {
+    let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.size));
+    let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.size));
+    let distanceX = circle.x - closestX;
+    let distanceY = circle.y - closestY;
+    return (distanceX * distanceX + distanceY * distanceY) < (circle.radius * circle.radius);
+}
 
 // メインループ
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
 function update() {
-    // 1. 自動前進とプッシュ（ブレーキ＆チャージ）
-    if (player.isPushing) {
-        player.vx *= 0.92; // 急ブレーキ
-        if (player.vx < 1) {
-            player.charge = Math.min(player.charge + 2, player.maxCharge);
-        }
-    } else {
-        // 通常時：徐々に基本速度（5）に戻る
-        player.vx += (5 - player.vx) * 0.05;
-        player.charge = Math.max(player.charge - 4, 0);
+    // --- 1. 移動処理 (PC/スマホ両対応) ---
+    let currentSpeed = player.baseSpeed + (player.speedItemCount * 0.5);
+    let dx = 0;
+    let dy = 0;
+
+    // PCキーボード入力
+    if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= 1;
+    if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += 1;
+    if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= 1;
+    if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += 1;
+
+    if (dx !== 0 && dy !== 0) {
+        dx *= 0.7071;
+        dy *= 0.7071;
     }
 
-    // 2. 物理演算（重力）
-    player.vy += GRAVITY;
-    player.y += player.vy;
-    player.x += player.vx; // 実際はカメラを動かすが、座標としては進める
+    // スマホジョイスティック入力がある場合は上書き
+    if (joystick.active) {
+        dx = joystick.dirX;
+        dy = joystick.dirY;
+    }
 
-    // 3. ホバー（浮遊）処理 [Raycastの再現]
-    const currentGround = getGroundHeight(player.x);
-    const distanceFromGround = currentGround - (player.y + player.height);
+    player.x += dx * currentSpeed;
+    player.y += dy * currentSpeed;
 
-    if (distanceFromGround < TARGET_HOVER_HEIGHT) {
-        // 地面に近づくほど強い上向きの力をかける（バネの原理）
-        if (player.isPushing) {
-            // プッシュ中は地面に張り付く（急降下）
-            player.y = currentGround - player.height - 5;
-            player.vy = 0;
-        } else {
-            const force = (TARGET_HOVER_HEIGHT - distanceFromGround) * HOVER_SPRING;
-            player.vy -= force;
-            player.vy *= 0.85; // クッション効果（ダンパー）
+    player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+    player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+    // --- 2. スキル（ウェーブ）処理 ---
+    if (keys[" "] || keys["Spacebar"]) {
+        player.triggerWave = true;
+    }
+
+    if (player.triggerWave && player.waveCooldown === 0 && !player.waveActive) {
+        player.waveActive = true;
+        player.waveRadius = player.radius;
+        player.waveCooldown = 120; 
+    }
+    player.triggerWave = false; // トリガーリセット
+
+    if (player.waveActive) {
+        player.waveRadius += 4 + (player.powerItemCount * 0.5);
+        if (player.waveRadius >= player.maxWaveRadius + (player.powerItemCount * 10)) {
+            player.waveActive = false;
         }
     }
 
-    // 画面表示の更新
-    document.getElementById('speed-text').innerText = Math.round(player.vx * 10);
-    document.getElementById('charge-text').innerText = Math.round(player.charge) + "%";
+    if (player.waveCooldown > 0) player.waveCooldown--;
+
+    // --- 3. アイテム回収 ---
+    for (let i = items.length - 1; i >= 0; i--) {
+        if (checkCollision(player, items[i])) {
+            if (items[i].type === "SPEED") player.speedItemCount++;
+            else if (items[i].type === "POWER") player.powerItemCount++;
+            items.splice(i, 1);
+            spawnItem();
+        }
+    }
+
+    // --- 4. UI更新 ---
+    let cdText = player.waveCooldown > 0 ? `RECHARGING (${Math.ceil(player.waveCooldown/60)}s)` : "READY";
+    statsUi.innerHTML = `SPEED: +${player.speedItemCount} | POWER: +${player.powerItemCount} | WAVE: <span style="color: #00ffcc;">${cdText}</span>`;
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // カメラの追従（プレイヤーが常に画面の左側に固定されるように背景をずらす）
-    const offsetX = player.x - 150;
-
-    // 1. 地面の描画
-    ctx.fillStyle = '#654321';
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height);
-    for (let screenX = 0; screenX <= canvas.width; screenX += 5) {
-        const worldX = screenX + offsetX;
-        ctx.lineTo(screenX, getGroundHeight(worldX));
+    // 背景グリッド
+    ctx.strokeStyle = "#1f1f3a";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
     }
-    ctx.lineTo(canvas.width, canvas.height);
+    for (let y = 0; y < canvas.height; y += 40) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+
+    // アイテム
+    items.forEach(item => {
+        ctx.fillStyle = item.type === "SPEED" ? "#00ffff" : "#ff0055";
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.fillRect(item.x, item.y, item.size, item.size);
+        ctx.fillStyle = "#fff";
+        ctx.shadowBlur = 0;
+        ctx.font = "10px sans-serif";
+        ctx.fillText(item.type[0], item.x + 6, item.y + 14);
+    });
+
+    // ウェーブ
+    if (player.waveActive) {
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.5)";
+        ctx.lineWidth = 3;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#00ffcc";
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.waveRadius, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // プレイヤー
+    ctx.fillStyle = "#00ff55";
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "#00ff55";
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // 芝生の表面
-    ctx.fillStyle = '#228B22';
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowBlur = 0;
     ctx.beginPath();
-    for (let screenX = 0; screenX <= canvas.width; screenX += 5) {
-        const worldX = screenX + offsetX;
-        if (screenX === 0) ctx.moveTo(screenX, getGroundHeight(worldX));
-        else ctx.lineTo(screenX, getGroundHeight(worldX));
-    }
-    ctx.lineTo(canvas.width, canvas.height);
-    // 厚みを持たせるための簡易描画
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#32CD32';
-    ctx.stroke();
-
-    // 2. マシーン（プレイヤー）の描画
-    ctx.save();
-    // 走行速度やチャージ状態に合わせて色を変える
-    ctx.fillStyle = player.isPushing ? '#FF4500' : (player.vx > 8 ? '#00FFFF' : '#FFD700');
-    
-    // プレイヤーの画面内位置（Xは固定、Yだけ動く）
-    const screenPlayerX = player.x - offsetX;
-    
-    // マシーンの本体（エアライドっぽい流線型をイメージした四角）
-    ctx.fillRect(screenPlayerX, player.y, player.width, player.height);
-    
-    // チャージエフェクト
-    if (player.charge > 0) {
-        ctx.strokeStyle = `rgba(255, 69, 0, ${player.charge / 100})`;
-        ctx.lineWidth = 4;
-        ctx.strokeRect(screenPlayerX - 5, player.y - 5, player.width + 10, player.height + 10);
-    }
-    ctx.restore();
+    ctx.arc(player.x, player.y, 4, 0, Math.PI * 2);
+    ctx.fill();
 }
 
-function loop() {
-    update();
-    draw();
-    requestAnimationFrame(loop);
-}
-
-loop();
+gameLoop();
 </script>
+
 </body>
 </html>
