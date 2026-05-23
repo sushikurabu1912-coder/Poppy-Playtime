@@ -1,439 +1,203 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Horror Factory</title>
-
-<style>
-    body{
-        margin:0;
-        overflow:hidden;
-        background:black;
-        font-family:sans-serif;
-    }
-
-    #ui{
-        position:absolute;
-        top:10px;
-        left:10px;
-        color:white;
-        z-index:10;
-        background:rgba(0,0,0,0.5);
-        padding:10px;
-        border-radius:10px;
-        line-height:1.6;
-    }
-
-    #message{
-        position:absolute;
-        top:50%;
-        left:50%;
-        transform:translate(-50%,-50%);
-        color:white;
-        font-size:60px;
-        display:none;
-        z-index:20;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>2D Air Ride Prototype</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #222;
+            overflow: hidden;
+            font-family: sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #canvas {
+            display: block;
+            background: linear-gradient(to bottom, #87CEEB, #E0F6FF);
+            margin: 0 auto;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #333;
+            font-weight: bold;
+            background: rgba(255,255,255,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            text-shadow: 1px 1px 3px black;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
 
-<div id="ui">
-    WASD = 移動<br>
-    矢印キー = 視点変更<br>
-    バッテリーを3つ集めて脱出！
-</div>
+    <div id="ui">
+        SPEED: <span id="speed-text">0</span><br>
+        CHARGE: <span id="charge-text">0%</span>
+    </div>
+    <div id="instructions">画面を長押しで「プッシュ（減速＆チャージ）」 / 離して「ダッシュ」</div>
+    <canvas id="canvas"></canvas>
 
-<div id="message"></div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
 
-<script type="module">
+// 画面サイズ設定（スマホ対応）
+canvas.width = window.innerWidth > 800 ? 800 : window.innerWidth;
+canvas.height = window.innerHeight > 450 ? 450 : window.innerHeight;
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
+// ゲームの状態・定数
+const GRAVITY = 0.4;
+const TARGET_HOVER_HEIGHT = 60; // 目標とする地面からの浮遊高さ
+const HOVER_SPRING = 0.08;      // ホバーの反発強さ
 
-/////////////////////////
-// シーン
-/////////////////////////
+// マシーン（プレイヤー）のデータ
+const player = {
+    x: 100,
+    y: 200,
+    vx: 5,         // 前進速度（自動走行）
+    vy: 0,
+    width: 40,
+    height: 20,
+    isPushing: false,
+    charge: 0,
+    maxCharge: 100
+};
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050505);
-scene.fog = new THREE.Fog(0x000000, 10, 100);
-
-const camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-);
-
-const renderer = new THREE.WebGLRenderer({
-    antialias:true
-});
-
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-/////////////////////////
-// ライト
-/////////////////////////
-
-const ambient = new THREE.AmbientLight(0x404040, 1);
-scene.add(ambient);
-
-const flashlight = new THREE.SpotLight(0xffffff, 5);
-
-flashlight.angle = 0.5;
-flashlight.penumbra = 0.5;
-flashlight.distance = 70;
-
-scene.add(flashlight);
-scene.add(flashlight.target);
-
-/////////////////////////
-// 床
-/////////////////////////
-
-const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(200,200),
-    new THREE.MeshStandardMaterial({
-        color:0x222222
-    })
-);
-
-floor.rotation.x = -Math.PI/2;
-scene.add(floor);
-
-/////////////////////////
-// 壁
-/////////////////////////
-
-function wall(x,y,z,w,h,d,color=0x444444){
-
-    const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(w,h,d),
-        new THREE.MeshStandardMaterial({
-            color:color
-        })
-    );
-
-    mesh.position.set(x,y,z);
-
-    scene.add(mesh);
+// 簡単な地形データ（地面の高さの配列）
+const groundY = canvas.height - 80;
+function getGroundHeight(x) {
+    // 凸凹の坂道をサイン波で再現
+    return groundY + Math.sin(x * 0.005) * 40 + Math.cos(x * 0.01) * 20;
 }
 
-wall(0,5,-80,160,10,2);
-wall(-80,5,0,2,10,160);
-wall(80,5,0,2,10,160);
-
-wall(0,5,80,160,10,2);
-
-wall(-30,5,-20,2,10,40);
-wall(20,5,-40,40,10,2);
-wall(40,5,10,2,10,50);
-
-/////////////////////////
-// プレイヤー
-/////////////////////////
-
-camera.position.set(0,2,20);
-
-/////////////////////////
-// 視点回転
-/////////////////////////
-
-let yaw = 0;
-let pitch = 0;
-
-/////////////////////////
-// キー入力
-/////////////////////////
-
-const keys = {};
-
-document.addEventListener("keydown", e=>{
-    keys[e.key.toLowerCase()] = true;
-});
-
-document.addEventListener("keyup", e=>{
-    keys[e.key.toLowerCase()] = false;
-});
-
-/////////////////////////
-// バッテリー
-/////////////////////////
-
-const batteries = [];
-let collected = 0;
-
-function createBattery(x,z){
-
-    const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(1,1,1),
-        new THREE.MeshStandardMaterial({
-            color:0xffff00,
-            emissive:0xffff00,
-            emissiveIntensity:1
-        })
-    );
-
-    mesh.position.set(x,1,z);
-
-    scene.add(mesh);
-
-    batteries.push(mesh);
-}
-
-createBattery(-20,-20);
-createBattery(30,-50);
-createBattery(-40,40);
-
-/////////////////////////
-// モンスター
-/////////////////////////
-
-const monster = new THREE.Mesh(
-    new THREE.BoxGeometry(4,6,4),
-    new THREE.MeshStandardMaterial({
-        color:0x0066ff,
-        emissive:0x0033ff,
-        emissiveIntensity:1
-    })
-);
-
-monster.position.set(0,3,-60);
-
-scene.add(monster);
-
-/////////////////////////
-// ドア
-/////////////////////////
-
-const door = new THREE.Mesh(
-    new THREE.BoxGeometry(8,10,1),
-    new THREE.MeshStandardMaterial({
-        color:0x888888
-    })
-);
-
-door.position.set(0,5,-75);
-
-scene.add(door);
-
-/////////////////////////
-// ゲーム状態
-/////////////////////////
-
-let gameOver = false;
-
-const message = document.getElementById("message");
-
-function endGame(text){
-
-    gameOver = true;
-
-    message.style.display = "block";
-    message.innerHTML = text;
-}
-
-/////////////////////////
-// カメラ回転
-/////////////////////////
-
-function updateCameraRotation(){
-
-    const rotateSpeed = 0.03;
-
-    if(keys["arrowleft"]){
-        yaw += rotateSpeed;
-    }
-
-    if(keys["arrowright"]){
-        yaw -= rotateSpeed;
-    }
-
-    if(keys["arrowup"]){
-        pitch += rotateSpeed;
-    }
-
-    if(keys["arrowdown"]){
-        pitch -= rotateSpeed;
-    }
-
-    pitch = Math.max(-1.2, Math.min(1.2, pitch));
-
-    camera.rotation.order = "YXZ";
-    camera.rotation.y = yaw;
-    camera.rotation.x = pitch;
-}
-
-/////////////////////////
-// プレイヤー移動
-/////////////////////////
-
-function updateMovement(){
-
-    const speed = 0.2;
-
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
-
-    forward.y = 0;
-    forward.normalize();
-
-    const right = new THREE.Vector3();
-    right.crossVectors(forward, new THREE.Vector3(0,1,0));
-
-    if(keys["w"]){
-        camera.position.add(
-            forward.clone().multiplyScalar(speed)
-        );
-    }
-
-    if(keys["s"]){
-        camera.position.add(
-            forward.clone().multiplyScalar(-speed)
-        );
-    }
-
-    if(keys["a"]){
-        camera.position.add(
-            right.clone().multiplyScalar(speed)
-        );
-    }
-
-    if(keys["d"]){
-        camera.position.add(
-            right.clone().multiplyScalar(-speed)
-        );
+// 入力イベント（マウス＆スマホのタップに対応）
+function startPush() { player.isPushing = true; }
+function endPush() {
+    if (player.isPushing) {
+        // チャージ量に応じてダッシュ
+        player.vx += (player.charge / 100) * 8;
+        player.isPushing = false;
     }
 }
 
-/////////////////////////
-// 懐中電灯
-/////////////////////////
+window.addEventListener('mousedown', startPush);
+window.addEventListener('mouseup', endPush);
+window.addEventListener('touchstart', (e) => { e.preventDefault(); startPush(); }, {passive: false});
+window.addEventListener('touchend', (e) => { e.preventDefault(); endPush(); }, {passive: false});
 
-function updateFlashlight(){
-
-    flashlight.position.copy(camera.position);
-
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-
-    flashlight.target.position.copy(
-        camera.position.clone().add(dir)
-    );
-}
-
-/////////////////////////
-// バッテリー取得
-/////////////////////////
-
-function updateBatteries(){
-
-    batteries.forEach(b=>{
-
-        if(!b.visible) return;
-
-        b.rotation.y += 0.03;
-
-        const dist = camera.position.distanceTo(b.position);
-
-        if(dist < 2){
-
-            b.visible = false;
-
-            collected++;
-
-            console.log("Collected:", collected);
+// メインループ
+function update() {
+    // 1. 自動前進とプッシュ（ブレーキ＆チャージ）
+    if (player.isPushing) {
+        player.vx *= 0.92; // 急ブレーキ
+        if (player.vx < 1) {
+            player.charge = Math.min(player.charge + 2, player.maxCharge);
         }
-    });
-}
-
-/////////////////////////
-// モンスターAI
-/////////////////////////
-
-function updateMonster(){
-
-    const dir = new THREE.Vector3()
-        .subVectors(camera.position, monster.position)
-        .normalize();
-
-    monster.position.add(
-        dir.multiplyScalar(0.04)
-    );
-
-    monster.lookAt(camera.position);
-
-    const dist = camera.position.distanceTo(monster.position);
-
-    if(dist < 3){
-
-        endGame("GAME OVER");
-    }
-}
-
-/////////////////////////
-// 脱出判定
-/////////////////////////
-
-function updateDoor(){
-
-    if(collected < 3) return;
-
-    const dist = camera.position.distanceTo(door.position);
-
-    if(dist < 6){
-
-        endGame("YOU ESCAPED!");
-    }
-}
-
-/////////////////////////
-// アニメーション
-/////////////////////////
-
-function animate(){
-
-    requestAnimationFrame(animate);
-
-    if(!gameOver){
-
-        updateCameraRotation();
-
-        updateMovement();
-
-        updateFlashlight();
-
-        updateBatteries();
-
-        updateMonster();
-
-        updateDoor();
+    } else {
+        // 通常時：徐々に基本速度（5）に戻る
+        player.vx += (5 - player.vx) * 0.05;
+        player.charge = Math.max(player.charge - 4, 0);
     }
 
-    renderer.render(scene, camera);
+    // 2. 物理演算（重力）
+    player.vy += GRAVITY;
+    player.y += player.vy;
+    player.x += player.vx; // 実際はカメラを動かすが、座標としては進める
+
+    // 3. ホバー（浮遊）処理 [Raycastの再現]
+    const currentGround = getGroundHeight(player.x);
+    const distanceFromGround = currentGround - (player.y + player.height);
+
+    if (distanceFromGround < TARGET_HOVER_HEIGHT) {
+        // 地面に近づくほど強い上向きの力をかける（バネの原理）
+        if (player.isPushing) {
+            // プッシュ中は地面に張り付く（急降下）
+            player.y = currentGround - player.height - 5;
+            player.vy = 0;
+        } else {
+            const force = (TARGET_HOVER_HEIGHT - distanceFromGround) * HOVER_SPRING;
+            player.vy -= force;
+            player.vy *= 0.85; // クッション効果（ダンパー）
+        }
+    }
+
+    // 画面表示の更新
+    document.getElementById('speed-text').innerText = Math.round(player.vx * 10);
+    document.getElementById('charge-text').innerText = Math.round(player.charge) + "%";
 }
 
-animate();
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-/////////////////////////
-// リサイズ
-/////////////////////////
+    // カメラの追従（プレイヤーが常に画面の左側に固定されるように背景をずらす）
+    const offsetX = player.x - 150;
 
-window.addEventListener("resize", ()=>{
+    // 1. 地面の描画
+    ctx.fillStyle = '#654321';
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height);
+    for (let screenX = 0; screenX <= canvas.width; screenX += 5) {
+        const worldX = screenX + offsetX;
+        ctx.lineTo(screenX, getGroundHeight(worldX));
+    }
+    ctx.lineTo(canvas.width, canvas.height);
+    ctx.fill();
 
-    camera.aspect = window.innerWidth/window.innerHeight;
+    // 芝生の表面
+    ctx.fillStyle = '#228B22';
+    ctx.beginPath();
+    for (let screenX = 0; screenX <= canvas.width; screenX += 5) {
+        const worldX = screenX + offsetX;
+        if (screenX === 0) ctx.moveTo(screenX, getGroundHeight(worldX));
+        else ctx.lineTo(screenX, getGroundHeight(worldX));
+    }
+    ctx.lineTo(canvas.width, canvas.height);
+    // 厚みを持たせるための簡易描画
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#32CD32';
+    ctx.stroke();
 
-    camera.updateProjectionMatrix();
+    // 2. マシーン（プレイヤー）の描画
+    ctx.save();
+    // 走行速度やチャージ状態に合わせて色を変える
+    ctx.fillStyle = player.isPushing ? '#FF4500' : (player.vx > 8 ? '#00FFFF' : '#FFD700');
+    
+    // プレイヤーの画面内位置（Xは固定、Yだけ動く）
+    const screenPlayerX = player.x - offsetX;
+    
+    // マシーンの本体（エアライドっぽい流線型をイメージした四角）
+    ctx.fillRect(screenPlayerX, player.y, player.width, player.height);
+    
+    // チャージエフェクト
+    if (player.charge > 0) {
+        ctx.strokeStyle = `rgba(255, 69, 0, ${player.charge / 100})`;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(screenPlayerX - 5, player.y - 5, player.width + 10, player.height + 10);
+    }
+    ctx.restore();
+}
 
-    renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
-    );
-});
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
 
+loop();
 </script>
-
 </body>
 </html>
