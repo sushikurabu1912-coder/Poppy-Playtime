@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>シティトライアル風 2Dミニゲーム</title>
+    <title>シティトライアル風 2Dミニゲーム (チャージターン実装版)</title>
     <style>
         body {
             margin: 0;
@@ -25,7 +25,7 @@
         }
         canvas {
             display: block;
-            background-color: #33a853; /* 草原ベースの街 */
+            background-color: #33a853; 
         }
         #ui-overlay {
             position: absolute;
@@ -82,7 +82,7 @@
             <span id="skill-name" style="color: #ffeb3b;">抽選中...</span>
         </div>
     </div>
-    <div id="skill-announcement" id="announce-box">
+    <div id="skill-announcement">
         獲得スキル: <span id="announce-name">???</span><br>
         <span style="font-size: 14px; color: #fff;">[F]キーで発動！</span>
     </div>
@@ -94,8 +94,8 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // --- ゲーム設定 ---
-const MAP_SIZE = 2000; // 広大な街のサイズ
-const GAME_DURATION = 60; // 制限時間（秒）
+const MAP_SIZE = 2000; 
+const GAME_DURATION = 60; 
 
 // プレイヤー（マシン）情報
 const player = {
@@ -105,20 +105,16 @@ const player = {
     vy: 0,
     angle: 0,
     radius: 18,
-    // 基本ステータス
     baseSpeed: 5,
     accelRate: 0.4,
-    friction: 0.92,
-    // パッチ強化分
+    friction: 0.94, // 滑り感を出すために少し摩擦を減衰（0.92 -> 0.94）
     patchSpeed: 0,
     patchAccel: 0,
     patchTurn: 0,
-    // チャージシステム
     charge: 0,
     maxCharge: 100,
     isCharging: false,
     dashTimer: 0,
-    // スキル関連
     skill: null,
     skillCooldown: 0,
     invincibleTimer: 0
@@ -126,9 +122,9 @@ const player = {
 
 // スキルリスト
 const SKILLS = [
-    { id: 'plasma', name: 'プラズマウェーブ', color: '#00ffff', desc: '前方に貫通する電撃弾を放つ！' },
-    { id: 'freeze', name: 'フリーズブリザード', color: '#a3e5ff', desc: '周囲のアイテムを引き寄せ、敵を凍らせる範囲波！' },
-    { id: 'wheel', name: 'ホイールダッシュ', color: '#ff5722', desc: '3秒間、超高速かつ無敵状態で突進する！' }
+    { id: 'plasma', name: 'プラズマウェーブ', color: '#00ffff' },
+    { id: 'freeze', name: 'フリーズブリザード', color: '#a3e5ff' },
+    { id: 'wheel', name: 'ホイールダッシュ', color: '#ff5722' }
 ];
 
 // 割り当てられたスキルをランダム決定
@@ -138,17 +134,14 @@ document.getElementById('skill-name').style.color = player.skill.color;
 document.getElementById('announce-name').innerText = player.skill.name;
 document.getElementById('announce-name').style.color = player.skill.color;
 
-// エンティティ管理
 const items = [];
 const buildings = [];
 const projectiles = [];
 const particles = [];
 
-// キー入力管理
 const keys = { w: false, a: false, s: false, d: false, Space: false, f: false };
 
-// --- 初期配置生成 ---
-// 建物の配置
+// --- マップ生成 ---
 for (let i = 0; i < 40; i++) {
     buildings.push({
         x: Math.random() * (MAP_SIZE - 200) + 100,
@@ -157,7 +150,6 @@ for (let i = 0; i < 40; i++) {
         h: Math.random() * 100 + 60
     });
 }
-// アイテム（パッチ）の配置
 function spawnItem() {
     const types = ['speed', 'accel', 'turn'];
     items.push({
@@ -193,57 +185,42 @@ window.addEventListener('keyup', (e) => {
     if (e.code === 'KeyF') keys.f = false;
 });
 
-// --- スキル発動処理 ---
+// --- スキル発動 ---
 function useSkill() {
     if (player.skillCooldown > 0 || timeLeft <= 0) return;
 
     if (player.skill.id === 'plasma') {
-        // 前方に弾を発射
         projectiles.push({
-            x: player.x,
-            y: player.y,
-            vx: Math.cos(player.angle) * 15,
-            vy: Math.sin(player.angle) * 15,
-            radius: 15,
-            color: '#00ffff',
-            life: 40
+            x: player.x, y: player.y,
+            vx: Math.cos(player.angle) * 15, vy: Math.sin(player.angle) * 15,
+            radius: 15, color: '#00ffff', life: 40
         });
-        player.skillCooldown = 90; // クールダウン
+        player.skillCooldown = 90;
     } 
     else if (player.skill.id === 'freeze') {
-        // 全方位衝撃波
         for (let angle = 0; angle < Math.PI * 2; angle += 0.4) {
             projectiles.push({
-                x: player.x,
-                y: player.y,
-                vx: Math.cos(angle) * 6,
-                vy: Math.sin(angle) * 6,
-                radius: 10,
-                color: '#a3e5ff',
-                life: 25
+                x: player.x, y: player.y,
+                vx: Math.cos(angle) * 6, vy: Math.sin(angle) * 6,
+                radius: 10, color: '#a3e5ff', life: 25
             });
         }
         player.skillCooldown = 180;
     } 
     else if (player.skill.id === 'wheel') {
-        // 無敵超加速突進
-        player.invincibleTimer = 180; // 3秒間無敵＆高速化
-        player.dashTimer = 30; 
-        player.vx = Math.cos(player.angle) * 20;
-        player.vy = Math.sin(player.angle) * 20;
+        // ホイールダッシュ発動（初期の推進力だけ与え、制限はループ内で爆上げ）
+        player.invincibleTimer = 180; // 3秒間
+        player.dashTimer = 40; 
+        player.vx = Math.cos(player.angle) * 18;
+        player.vy = Math.sin(player.angle) * 18;
         player.skillCooldown = 300;
     }
 
-    // 発動エフェクト
     for (let i = 0; i < 15; i++) {
         particles.push({
-            x: player.x,
-            y: player.y,
-            vx: (Math.random() - 0.5) * 8,
-            vy: (Math.random() - 0.5) * 8,
-            radius: Math.random() * 6 + 2,
-            color: player.skill.color,
-            life: 20
+            x: player.x, y: player.y,
+            vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8,
+            radius: Math.random() * 6 + 2, color: player.skill.color, life: 20
         });
     }
 }
@@ -251,17 +228,17 @@ function useSkill() {
 // チャージダッシュ発動
 function triggerChargeDash() {
     if (player.charge > 10) {
-        const dashPower = (player.charge / 100) * (8 + player.patchAccel * 1.5);
+        const dashPower = (player.charge / 100) * (9 + player.patchAccel * 1.5);
+        // 現在向いている方向（チャージターンで変えた向き）へダッシュ！
         player.vx = Math.cos(player.angle) * dashPower;
         player.vy = Math.sin(player.angle) * dashPower;
-        player.dashTimer = 15;
+        player.dashTimer = 20;
         
-        // ダッシュ煙エフェクト
-        for(let i=0; i<10; i++){
+        for(let i=0; i<12; i++){
             particles.push({
                 x: player.x, y: player.y,
-                vx: -Math.cos(player.angle)*3 + (Math.random()-0.5)*3,
-                vy: -Math.sin(player.angle)*3 + (Math.random()-0.5)*3,
+                vx: -Math.cos(player.angle)*3 + (Math.random()-0.5)*4,
+                vy: -Math.sin(player.angle)*3 + (Math.random()-0.5)*4,
                 radius: Math.random()*8 + 4, color: '#fff', life: 15
             });
         }
@@ -270,7 +247,7 @@ function triggerChargeDash() {
     player.isCharging = false;
 }
 
-// --- タイマー処理 ---
+// --- タイマー ---
 let timeLeft = GAME_DURATION;
 const timerInterval = setInterval(() => {
     if (timeLeft > 0) {
@@ -281,54 +258,60 @@ const timerInterval = setInterval(() => {
     }
 }, 1000);
 
-// --- メインゲームループ ---
+// --- メインループ ---
 function update() {
     if (timeLeft <= 0) return drawEndScreen();
 
-    // クールダウン・タイマーの消化
     if (player.skillCooldown > 0) player.skillCooldown--;
     if (player.invincibleTimer > 0) player.invincibleTimer--;
     if (player.dashTimer > 0) player.dashTimer--;
 
-    // 1. 移動入力の処理
     let ax = 0;
     let ay = 0;
+    const currentAccel = player.accelRate + (player.patchAccel * 0.1);
+
+    // WASDの入力受付
+    if (keys.w) ay -= currentAccel;
+    if (keys.s) ay += currentAccel;
+    if (keys.a) ax -= currentAccel;
+    if (keys.d) ax += currentAccel;
 
     if (keys.Space) {
-        // ブレーキとチャージ蓄積
         player.isCharging = true;
-        player.vx *= 0.7;
-        player.vy *= 0.7;
-        if (Math.abs(player.vx) + Math.abs(player.vy) < 1) {
-            player.charge = Math.min(player.maxCharge, player.charge + 2 + player.patchTurn * 0.3);
+        // ★アップデート：急ブレーキ(vx *= 0.7)を廃止。アクセル（ax, ay）をゼロにして滑らせる！
+        ax = 0;
+        ay = 0;
+
+        // 速度が少し落ちてきたらチャージ開始
+        let currentSpeed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+        if (currentSpeed < 4.5) {
+            player.charge = Math.min(player.maxCharge, player.charge + 2.5 + player.patchTurn * 0.4);
         }
-    } else {
-        // 通常移動 (WASDによるダイレクト移動)
-        const currentAccel = player.accelRate + (player.patchAccel * 0.1);
-        if (keys.w) ay -= currentAccel;
-        if (keys.s) ay += currentAccel;
-        if (keys.a) ax -= currentAccel;
-        if (keys.d) ax += currentAccel;
     }
 
-    // ホイールダッシュ中の強制前方移動
+    // ★アップデート：ホイールダッシュ中の旋回＆加速処理
     if (player.invincibleTimer > 0 && player.skill.id === 'wheel') {
-        ax = Math.cos(player.angle) * 1.5;
-        ay = Math.sin(player.angle) * 1.5;
+        // ホイール中もWASDで向きは変えられるが、常にマシンの正面へ超強力な推進力を足し続ける
+        ax += Math.cos(player.angle) * 1.5;
+        ay += Math.sin(player.angle) * 1.5;
     }
 
-    // 加速度の適用
+    // 速度に加速度を適用
     player.vx += ax;
     player.vy += ay;
 
-    // 摩擦と最高速度制限
-    if (!keys.w && !keys.s && !keys.a && !keys.d && !keys.Space) {
+    // 摩擦（慣性減速）の適用
+    // チャージ中または何も押していない時は自然に滑る
+    if ((!keys.w && !keys.s && !keys.a && !keys.d) || keys.Space) {
         player.vx *= player.friction;
         player.vy *= player.friction;
     }
-    
+
+    // 最高速度の上限計算
     let currentMaxSpeed = player.baseSpeed + (player.patchSpeed * 1.5);
-    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') currentMaxSpeed *= 2.0; // ホイール中超高速
+    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') {
+        currentMaxSpeed *= 2.8; // ホイールダッシュ中は最高速度上限を2.8倍に跳ね上げる
+    }
 
     const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
     if (speed > currentMaxSpeed && player.dashTimer <= 0) {
@@ -336,63 +319,68 @@ function update() {
         player.vy = (player.vy / speed) * currentMaxSpeed;
     }
 
-    // 位置の更新
+    // 位置更新
     player.x += player.vx;
     player.y += player.vy;
 
-    // プレイヤーの向きを移動方向に滑らかに合わせる
+    // プレイヤーの向きの計算（チャージ中・通常移動中・ホイール中いつでも方向転換可能）
     if (Math.abs(player.vx) > 0.1 || Math.abs(player.vy) > 0.1) {
-        const targetAngle = Math.atan2(player.vy, player.vx);
-        // 旋回性能パッチ(TURN)に応じて素早く正面を向く
-        const turnSpeed = 0.15 + (player.patchTurn * 0.05);
+        // WASDが押されている場合は、その入力方向を優先して向く（チャージターン用）
+        let targetAngle = player.angle;
+        if (keys.w || keys.s || keys.a || keys.d) {
+            let inputX = 0; let inputY = 0;
+            if (keys.w) inputY -= 1; if (keys.s) inputY += 1;
+            if (keys.a) inputX -= 1; if (keys.d) inputX += 1;
+            targetAngle = Math.atan2(inputY, inputX);
+        } else {
+            // キーが押されてなければ現在の進んでいる方向を向く
+            targetAngle = Math.atan2(player.vy, player.vx);
+        }
+
+        const turnSpeed = 0.12 + (player.patchTurn * 0.04);
         let diff = targetAngle - player.angle;
         while (diff < -Math.PI) diff += Math.PI * 2;
         while (diff > Math.PI) diff -= Math.PI * 2;
         player.angle += diff * turnSpeed;
     }
 
-    // マップ外へのはみ出し防止
+    // 壁・マップ外の判定
     player.x = Math.max(player.radius, Math.min(MAP_SIZE - player.radius, player.x));
     player.y = Math.max(player.radius, Math.min(MAP_SIZE - player.radius, player.y));
 
-    // 2. 建造物との当たり判定（簡易壁判定）
     buildings.forEach(b => {
         if (player.x + player.radius > b.x && player.x - player.radius < b.x + b.w &&
             player.y + player.radius > b.y && player.y - player.radius < b.y + b.h) {
-            // めり込み量に応じて位置を押し戻す
             const fromLeft = player.x - b.x;
             const fromRight = (b.x + b.w) - player.x;
             const fromTop = player.y - b.y;
             const fromBottom = (b.y + b.h) - player.y;
             const minDist = Math.min(fromLeft, fromRight, fromTop, fromBottom);
 
-            if (minDist === fromLeft) { player.x = b.x - player.radius; player.vx *= -0.5; }
-            else if (minDist === fromRight) { player.x = b.x + b.w + player.radius; player.vx *= -0.5; }
-            else if (minDist === fromTop) { player.y = b.y - player.radius; player.vy *= -0.5; }
-            else if (minDist === fromBottom) { player.y = b.y + b.h + player.radius; player.vy *= -0.5; }
+            if (minDist === fromLeft) { player.x = b.x - player.radius; player.vx *= -0.4; }
+            else if (minDist === fromRight) { player.x = b.x + b.w + player.radius; player.vx *= -0.4; }
+            else if (minDist === fromTop) { player.y = b.y - player.radius; player.vy *= -0.4; }
+            else if (minDist === fromBottom) { player.y = b.y + b.h + player.radius; player.vy *= -0.4; }
         }
     });
 
-    // 3. アイテムの回収判定
+    // アイテム回収
     for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
         const dx = player.x - item.x;
         const dy = player.y - item.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // フリーズブリザード使用時は周囲のアイテムを少し引き寄せる
-        if (player.invincibleTimer > 0 && player.skill.id === 'freeze' && dist < 200) {
-            item.x += (player.x - item.x) * 0.08;
-            item.y += (player.y - item.y) * 0.08;
+        if (player.invincibleTimer > 0 && player.skill.id === 'freeze' && dist < 220) {
+            item.x += (player.x - item.x) * 0.1;
+            item.y += (player.y - item.y) * 0.1;
         }
 
         if (dist < player.radius + item.radius) {
-            // パッチ獲得による能力強化
             if (item.type === 'speed') { player.patchSpeed++; document.getElementById('stat-speed').innerText = player.patchSpeed + 1; }
             if (item.type === 'accel') { player.patchAccel++; document.getElementById('stat-accel').innerText = player.patchAccel + 1; }
             if (item.type === 'turn') { player.patchTurn++; document.getElementById('stat-turn').innerText = player.patchTurn + 1; }
             
-            // キラキラエフェクト
             for(let p=0; p<5; p++) {
                 particles.push({
                     x: item.x, y: item.y,
@@ -403,11 +391,10 @@ function update() {
                 });
             }
             items.splice(i, 1);
-            spawnItem(); // 別の場所に再生成
+            spawnItem();
         }
     }
 
-    // 4. 弾とエフェクトの更新
     projectiles.forEach((p, idx) => {
         p.x += p.vx; p.y += p.vy; p.life--;
         if(p.life <= 0) projectiles.splice(idx, 1);
@@ -417,17 +404,15 @@ function update() {
         if(p.life <= 0) particles.splice(idx, 1);
     });
 
-    // --- 描画処理 ---
+    // --- 描画 ---
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // カメラ座標（プレイヤーが常に画面中心に位置するように）
     const cameraX = player.x - canvas.width / 2;
     const cameraY = player.y - canvas.height / 2;
 
     ctx.save();
     ctx.translate(-cameraX, -cameraY);
 
-    // 地面のグリッド線描画
+    // グリッド
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 2;
     for (let x = 0; x <= MAP_SIZE; x += 100) {
@@ -437,7 +422,7 @@ function update() {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
     }
 
-    // 建造物の描画
+    // 建物
     ctx.fillStyle = '#7a7a7a';
     buildings.forEach(b => {
         ctx.fillRect(b.x, b.y, b.w, b.h);
@@ -446,120 +431,79 @@ function update() {
         ctx.strokeRect(b.x, b.y, b.w, b.h);
     });
 
-    // アイテム（パッチ）の描画
+    // アイテム
     items.forEach(item => {
         ctx.beginPath();
         ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
         ctx.fillStyle = item.type === 'speed' ? '#ff3b30' : item.type === 'accel' ? '#007aff' : '#34c759';
         ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#fff';
-        ctx.stroke();
-        
-        // パッチ内の簡易模様
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 10px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(item.type[0].toUpperCase(), item.x, item.y);
     });
 
-    // 攻撃弾の描画
     projectiles.forEach(p => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color; ctx.fill();
     });
 
-    // パーティクルの描画
     particles.forEach(p => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color; ctx.fill();
     });
 
-    // プレイヤー（マシン）の描画
+    // プレイヤー描画
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle);
 
-    // チャージ中や無敵中のオーラ表現
     if (player.isCharging) {
         ctx.beginPath();
-        ctx.arc(0, 0, player.radius + (player.charge/4), 0, Math.PI*2);
-        ctx.fillStyle = `rgba(255, 235, 59, ${player.charge / 150})`;
+        ctx.arc(0, 0, player.radius + (player.charge/3), 0, Math.PI*2);
+        ctx.fillStyle = `rgba(255, 235, 59, ${player.charge / 130})`;
         ctx.fill();
     }
     if (player.invincibleTimer > 0) {
-        ctx.beginPath();
-        ctx.arc(0, 0, player.radius + 6, 0, Math.PI*2);
-        ctx.strokeStyle = player.skill.color;
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, player.radius + 6, 0, Math.PI*2);
+        ctx.strokeStyle = player.skill.color; ctx.lineWidth = 4; ctx.stroke();
     }
 
-    // 機体本体（ピンクの星型円盤をイメージ）
-    ctx.beginPath();
-    ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff8da1';
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#fff';
-    ctx.stroke();
-
-    // 前方がわかるような目印（コックピット窓風）
-    ctx.fillStyle = '#333';
-    ctx.fillRect(5, -6, 8, 12);
-
+    ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff8da1'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.fillStyle = '#333'; ctx.fillRect(5, -6, 8, 12); // 正面マーカー
     ctx.restore();
 
-    // チャージメーター（プレイヤーの頭上に表示）
+    // ゲージ類
     if (player.isCharging && player.charge > 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(player.x - 25, player.y - 35, 50, 6);
-        ctx.fillStyle = '#ffeb3b';
-        ctx.fillRect(player.x - 25, player.y - 35, (player.charge / player.maxCharge) * 50, 6);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(player.x - 25, player.y - 35, 50, 6);
+        ctx.fillStyle = '#ffeb3b'; ctx.fillRect(player.x - 25, player.y - 35, (player.charge / player.maxCharge) * 50, 6);
     }
-    // スキルのリロードインジケーター（足元）
     if (player.skillCooldown > 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.fillRect(player.x - 20, player.y + 28, 40, 4);
-        ctx.fillStyle = '#ff3b30';
-        ctx.fillRect(player.x - 20, player.y + 28, (player.skillCooldown / 300) * 40, 4);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(player.x - 20, player.y + 28, 40, 4);
+        ctx.fillStyle = '#ff3b30'; ctx.fillRect(player.x - 20, player.y + 28, (player.skillCooldown / 300) * 40, 4);
     }
 
     ctx.restore();
-
     requestAnimationFrame(update);
 }
 
-// --- リザルト画面表示 ---
 function drawEndScreen() {
     ctx.fillStyle = 'rgba(0,0,0,0.85)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = '#ffeb3b';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffeb3b'; ctx.font = 'bold 40px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('⚡ タイムアップ！ ⚡', canvas.width / 2, canvas.height / 2 - 100);
-
-    ctx.fillStyle = '#fff';
-    ctx.font = '24px sans-serif';
+    ctx.fillStyle = '#fff'; ctx.font = '24px sans-serif';
     ctx.fillText(`最終スキル: ${player.skill.name}`, canvas.width / 2, canvas.height / 2 - 40);
-    
     ctx.font = '20px sans-serif';
     ctx.fillStyle = '#ff3b30'; ctx.fillText(`🔴 最高速(SPEED)パッチ: +${player.patchSpeed}`, canvas.width / 2, canvas.height / 2 + 10);
     ctx.fillStyle = '#007aff'; ctx.fillText(`🔵 加速度(ACCEL)パッチ: +${player.patchAccel}`, canvas.width / 2, canvas.height / 2 + 45);
     ctx.fillStyle = '#34c759'; ctx.fillText(`🟢 旋回力(TURN)パッチ : +${player.patchTurn}`, canvas.width / 2, canvas.height / 2 + 80);
-
-    ctx.fillStyle = '#aaa';
-    ctx.font = '16px sans-serif';
-    ctx.fillText('画面をリロード(F5)すると、別のスキルで再挑戦できます。', canvas.width / 2, canvas.height / 2 + 150);
+    ctx.fillStyle = '#aaa'; ctx.font = '16px sans-serif';
+    ctx.fillText('ページをリロード(F5)すると、別のスキルで再スタートします。', canvas.width / 2, canvas.height / 2 + 150);
 }
 
-// ループ開始
 requestAnimationFrame(update);
 </script>
 
