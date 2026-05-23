@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Cyber City Trial - Advanced Tech</title>
+    <title>2D Cyber City Trial - Full Game</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
         body {
@@ -26,50 +26,20 @@
             padding: 8px;
             border-radius: 5px;
             border: 1px solid #00ffcc;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
-            justify-content: center;
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
         }
-        input, button {
-            background: #121224;
-            border: 1px solid #00ffcc;
-            color: #fff;
-            padding: 4px 8px;
-            font-family: monospace;
-        }
+        input, button { background: #121224; border: 1px solid #00ffcc; color: #fff; padding: 4px 8px; font-family: monospace; }
         button:active { background: #00ffcc; color: #000; }
-        #gameContainer {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            aspect-ratio: 4 / 3;
-        }
-        canvas {
-            width: 100%;
-            height: 100%;
-            border: 4px solid #00ffcc;
-            box-shadow: 0 0 20px #00ffcc;
-            background-color: #121224;
-            box-sizing: border-box;
-        }
-        #ui {
-            margin-top: 10px;
-            font-size: 14px;
-            text-align: center;
-            z-index: 10;
-        }
-        .touch-control {
-            position: absolute;
-            border-radius: 50%;
-            opacity: 0.6;
-            z-index: 5;
-            user-select: none;
-        }
+        #gameContainer { position: relative; width: 100%; max-width: 800px; aspect-ratio: 4 / 3; }
+        canvas { width: 100%; height: 100%; border: 4px solid #00ffcc; box-shadow: 0 0 20px #00ffcc; background-color: #121224; box-sizing: border-box; }
+        #ui { margin-top: 10px; font-size: 14px; text-align: center; z-index: 10; }
+        .touch-control { position: absolute; border-radius: 50%; opacity: 0.6; z-index: 5; user-select: none; }
         #joystick-base { bottom: 20px; left: 20px; width: 100px; height: 100px; background: rgba(0, 110, 255, 0.3); border: 2px solid #00ffff; }
         #joystick-stick { position: absolute; top: 30px; left: 30px; width: 40px; height: 40px; background: #00ffff; border-radius: 50%; }
-        #action-button { bottom: 30px; right: 20px; width: 80px; height: 80px; background: rgba(255, 0, 85, 0.4); border: 2px solid #ff0055; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 12px; box-shadow: 0 0 10px #ff0055; }
+        
+        /* 右側のアクションボタン群 */
+        #wave-button { bottom: 100px; right: 20px; width: 70px; height: 70px; background: rgba(255, 0, 85, 0.4); border: 2px solid #ff0055; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; box-shadow: 0 0 10px #ff0055; }
+        #shot-button { bottom: 20px; right: 30px; width: 80px; height: 80px; background: rgba(255, 200, 0, 0.4); border: 2px solid #ffaa00; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; box-shadow: 0 0 10px #ffaa00; }
     </style>
 </head>
 <body>
@@ -86,11 +56,12 @@
     <div id="gameContainer">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div id="joystick-base" class="touch-control"><div id="joystick-stick"></div></div>
-        <div id="action-button" class="touch-control">WAVE</div>
+        <div id="wave-button" class="touch-control">WAVE</div>
+        <div id="shot-button" class="touch-control">SHOT</div>
     </div>
     
     <div id="ui">
-        <span id="stats" style="color: #ff00ff;">SPEED: 0 | POWER: 0 | SHIELD: 0 | WAVE: READY</span>
+        <span id="stats" style="color: #ff00ff;">HP: 100 | SPEED: 0 | POWER: 0 | WAVE: READY</span>
     </div>
 
 <script>
@@ -105,21 +76,28 @@ window.addEventListener("keyup", e => keys[e.key] = false);
 
 const joystick = { base: document.getElementById("joystick-base"), stick: document.getElementById("joystick-stick"), active: false, startX: 0, startY: 0, dirX: 0, dirY: 0 };
 
+// ゲーム状態
+let gameState = "PLAY"; // "PLAY" または "GAMEOVER" または "WIN"
+
 // プレイヤー（自分）
 const player = {
     x: 400, y: 300, radius: 15, baseSpeed: 4,
-    speedItemCount: 0, powerItemCount: 0, shieldItemCount: 0,
+    hp: 100, maxHp: 100, shield: 0, maxShield: 50,
+    speedItemCount: 0, powerItemCount: 0,
     waveCooldown: 0, waveActive: false, waveRadius: 0, maxWaveRadius: 100,
-    triggerWave: false, isHacked: 0
+    triggerWave: false, triggerShot: false, shotCooldown: 0,
+    isHacked: 0, lastDx: 1, lastDy: 0 // 向いている方向の記憶用
 };
 
 // 相手プレイヤー
 let remotePlayer = null; 
 
-// アイテムと突発イベント
+// オブジェクト群
 let items = [];
 const ITEM_TYPES = ["SPEED", "POWER", "SHIELD"];
-let meteors = []; // メテオ（妨害イベント）の配列
+let meteors = []; 
+let bullets = [];       // 自分の弾
+let remoteBullets = []; // 相手の弾
 
 function spawnItem(index, fixedX = null, fixedY = null, fixedType = null) {
     const itemData = {
@@ -133,16 +111,11 @@ function spawnItem(index, fixedX = null, fixedY = null, fixedType = null) {
 }
 for (let i = 0; i < 12; i++) spawnItem();
 
-// メテオを定期的に降らせる
-setInterval(() => {
-    meteors.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        timer: 90, // 警告時間（フレーム換算。約1.5秒）
-        radius: 40,
-        exploded: false
-    });
-}, 4000); // 4秒に1回
+// メテオ周りのタイマー
+let meteorInterval = setInterval(() => {
+    if (gameState !== "PLAY") return;
+    meteors.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, timer: 90, radius: 45, exploded: false });
+}, 3500);
 
 // --- 📡 オンライン同期処理 ---
 let peer = null; let conn = null;
@@ -174,31 +147,51 @@ function setupConnection(isHost) {
     conn.on('data', (data) => {
         if (data.type === 'MOVE') remotePlayer = data.player;
         if (data.type === 'SYNC_ITEMS') items = data.items;
-        if (data.type === 'HACKED') triggerHackedEffect(); // 相手からハッキングを喰らった通知
+        if (data.type === 'HACKED') damagePlayer(0, true); // ハッキング効果
+        if (data.type === 'BULLET') remoteBullets.push(data.bullet); // 相手の弾を追加
+        if (data.type === 'DEAD') gameState = "WIN"; // 相手が死んだら自分の勝ち
     });
 }
 
-function triggerHackedEffect() {
-    if (player.shieldItemCount > 0) {
-        player.shieldItemCount--; // シールドが身代わりになる
-    } else {
-        player.isHacked = 60; // 1秒間操作不能（赤く点滅）
-        // アイテムをその場にぶちまける
-        for(let i=0; i<2; i++) {
+// ダメージ & ハッキング処理
+function damagePlayer(amount, isHacking = false) {
+    if (gameState !== "PLAY") return;
+
+    if (isHacking) {
+        if (player.shield > 0) {
+            player.shield = Math.max(0, player.shield - 25);
+        } else {
+            player.isHacked = 60; // 1秒麻痺
+            // パーツをぶちまける
             if(player.speedItemCount > 0) { player.speedItemCount--; spawnItem(undefined, player.x + (Math.random()*60-30), player.y + (Math.random()*60-30), "SPEED"); }
             if(player.powerItemCount > 0) { player.powerItemCount--; spawnItem(undefined, player.x + (Math.random()*60-30), player.y + (Math.random()*60-30), "POWER"); }
         }
+    } else {
+        // 通常被弾（シールドから削る）
+        if (player.shield > 0) {
+            player.shield -= amount;
+            if (player.shield < 0) { player.hp += player.shield; player.shield = 0; }
+        } else {
+            player.hp -= amount;
+        }
+    }
+
+    // 死亡判定
+    if (player.hp <= 0) {
+        player.hp = 0;
+        gameState = "GAMEOVER";
+        if (conn && conn.open) conn.send({ type: 'DEAD' });
     }
 }
 
-// スマホ操作（省略なく実装）
+// スマホ操作
 joystick.base.addEventListener("touchstart", e => {
     joystick.active = true;
     const rect = joystick.base.getBoundingClientRect();
     joystick.startX = rect.left + rect.width / 2; joystick.startY = rect.top + rect.height / 2;
 });
 window.addEventListener("touchmove", e => {
-    if (!joystick.active) return;
+    if (!joystick.active || gameState !== "PLAY") return;
     let touch = null; for (let t of e.touches) { if (t.clientX < window.innerWidth / 2) { touch = t; break; } }
     if (!touch) return;
     let dx = touch.clientX - joystick.startX; let dy = touch.clientY - joystick.startY;
@@ -211,87 +204,121 @@ window.addEventListener("touchend", e => {
     let leftTouchActive = false; for (let t of e.touches) { if (t.clientX < window.innerWidth / 2) leftTouchActive = true; }
     if (!leftTouchActive) { joystick.active = false; joystick.stick.style.transform = `translate(0px, 0px)`; joystick.dirX = 0; joystick.dirY = 0; }
 });
-document.getElementById("action-button").addEventListener("touchstart", e => { e.preventDefault(); player.triggerWave = true; });
+document.getElementById("wave-button").addEventListener("touchstart", e => { e.preventDefault(); player.triggerWave = true; });
+document.getElementById("shot-button").addEventListener("touchstart", e => { e.preventDefault(); player.triggerShot = true; });
 
-function checkCollision(circle, rect) {
-    let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.size));
-    let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.size));
-    return ((circle.x - closestX)**2 + (circle.y - closestY)**2) < (circle.radius**2);
-}
+// リトライ用画面タップ
+canvas.addEventListener("click", () => {
+    if (gameState !== "PLAY") {
+        // ゲームリセット
+        player.hp = 100; player.shield = 0; player.speedItemCount = 0; player.powerItemCount = 0;
+        player.x = 400; player.y = 300; player.isHacked = 0;
+        gameState = "PLAY"; remotePlayer = null; bullets = []; remoteBullets = []; meteors = [];
+    }
+});
 
 function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
 
 function update() {
-    // ハッキングによる麻痺状態のカウントダウン
+    if (gameState !== "PLAY") return;
+
+    // 移動方向・向きの更新
+    let dx = 0; let dy = 0;
     if (player.isHacked > 0) {
         player.isHacked--;
     } else {
-        // 通常移動処理
         let currentSpeed = player.baseSpeed + (player.speedItemCount * 0.5);
-        let dx = 0; let dy = 0;
         if (keys["ArrowUp"] || keys["w"] || keys["W"]) dy -= 1;
         if (keys["ArrowDown"] || keys["s"] || keys["S"]) dy += 1;
         if (keys["ArrowLeft"] || keys["a"] || keys["A"]) dx -= 1;
         if (keys["ArrowRight"] || keys["d"] || keys["D"]) dx += 1;
         if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
         if (joystick.active) { dx = joystick.dirX; dy = joystick.dirY; }
+        
         player.x += dx * currentSpeed; player.y += dy * currentSpeed;
+        if (dx !== 0 || dy !== 0) {
+            // 向いているベクトルを保存（ショットの射撃方向に使う）
+            let len = Math.sqrt(dx*dx + dy*dy);
+            player.lastDx = dx / len; player.lastDy = dy / len;
+        }
     }
-
     player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
     player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
 
+    // 🔫 ショット（攻撃）処理
+    if (keys["z"] || keys["Z"]) player.triggerShot = true;
+    if (player.triggerShot && player.shotCooldown === 0 && player.isHacked === 0) {
+        let b = { x: player.x, y: player.y, vx: player.lastDx * 8, vy: player.lastDy * 8, dmg: 10 + player.powerItemCount * 3 };
+        bullets.push(b);
+        player.shotCooldown = 20; // 連射速度（約0.3秒）
+        if (conn && conn.open) conn.send({ type: 'BULLET', bullet: b }); // 相手に弾丸を同期
+    }
+    player.triggerShot = false;
+    if (player.shotCooldown > 0) player.shotCooldown--;
+
+    // 自分の弾の移動と相手への当たり判定
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i]; b.x += b.vx; b.y += b.vy;
+        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
+    }
+
+    // 相手の弾の移動と自分への当たり判定
+    for (let i = remoteBullets.length - 1; i >= 0; i--) {
+        let rb = remoteBullets[i]; rb.x += rb.vx; rb.y += rb.vy;
+        let dist = Math.sqrt((player.x - rb.x)**2 + (player.y - rb.y)**2);
+        if (dist < player.radius + 4) {
+            damagePlayer(rb.dmg, false); // 通常ダメージ
+            remoteBullets.splice(i, 1);
+        } else if (rb.x < 0 || rb.x > canvas.width || rb.y < 0 || rb.y > canvas.height) {
+            remoteBullets.splice(i, 1);
+        }
+    }
+
     // WAVEスキルの処理
     if (keys[" "] || keys["Spacebar"]) player.triggerWave = true;
-    if (player.triggerWave && player.waveCooldown === 0 && !player.waveActive) {
-        player.waveActive = true; player.waveRadius = player.radius; player.waveCooldown = 150; 
+    if (player.triggerWave && player.waveCooldown === 0 && !player.waveActive && player.isHacked === 0) {
+        player.waveActive = true; player.waveRadius = player.radius; player.waveCooldown = 180; 
     }
     player.triggerWave = false;
 
     if (player.waveActive) {
         player.waveRadius += 5 + (player.powerItemCount * 0.5);
         let currentMaxW = player.maxWaveRadius + (player.powerItemCount * 15);
-        
-        // 敵プレイヤーへのハッキング判定
         if (remotePlayer) {
             let distToEnemy = Math.sqrt((player.x - remotePlayer.x)**2 + (player.y - remotePlayer.y)**2);
-            // WAVEの先端が敵にヒットした瞬間
             if (distToEnemy <= player.waveRadius && distToEnemy > player.waveRadius - 10) {
-                if (conn && conn.open) conn.send({ type: 'HACKED' }); // 相手にハック通知を送る
+                if (conn && conn.open) conn.send({ type: 'HACKED' });
             }
         }
-
         if (player.waveRadius >= currentMaxW) player.waveActive = false;
     }
     if (player.waveCooldown > 0) player.waveCooldown--;
 
-    // メテオ（環境トラップ）の更新処理
+    // メテオの処理
     for (let i = meteors.length - 1; i >= 0; i--) {
-        let m = meteors[i];
-        m.timer--;
-        if (m.timer <= 0 && !m.exploded) {
+        let m = meteors[i]; m.timer--;
+        if (m.timer === 0 && !m.exploded) {
             m.exploded = true;
-            // 爆発時の当たり判定（自分）
             let dist = Math.sqrt((player.x - m.x)**2 + (player.y - m.y)**2);
-            if (dist < m.radius + player.radius) {
-                triggerHackedEffect(); // メテオ直撃でもパーツを落とす
-            }
+            if (dist < m.radius + player.radius) damagePlayer(25, true); // メテオはハック＋大ダメ
         }
-        if (m.timer < -20) meteors.splice(i, 1); // 爆発エフェクトが終わったら消去
+        if (m.timer < -15) meteors.splice(i, 1);
     }
 
     // アイテム回収
     for (let i = items.length - 1; i >= 0; i--) {
-        if (checkCollision(player, items[i])) {
+        let closestX = Math.max(items[i].x, Math.min(player.x, items[i].x + items[i].size));
+        let closestY = Math.max(items[i].y, Math.min(player.y, items[i].y + items[i].size));
+        if (((player.x - closestX)**2 + (player.y - closestY)**2) < (player.radius**2)) {
             if (items[i].type === "SPEED") player.speedItemCount++;
             else if (items[i].type === "POWER") player.powerItemCount++;
-            else if (items[i].type === "SHIELD") player.shieldItemCount++;
+            else if (items[i].type === "SHIELD") player.shield = Math.min(player.maxShield, player.shield + 25);
             spawnItem(i);
             if (conn && conn.open) conn.send({ type: 'SYNC_ITEMS', items: items });
         }
     }
 
-    // 位置同期
+    // データ同期
     if (conn && conn.open) {
         conn.send({
             type: 'MOVE',
@@ -300,76 +327,96 @@ function update() {
     }
 
     let cdText = player.waveCooldown > 0 ? `RECHARGING (${Math.ceil(player.waveCooldown/60)}s)` : "READY";
-    statsUi.innerHTML = `SPEED: +${player.speedItemCount} | POWER: +${player.powerItemCount} | SHIELD: +${player.shieldItemCount} | WAVE: <span style="color: #00ffcc;">${cdText}</span>`;
+    statsUi.innerHTML = `HP: <span style="color:#00ff55;">${player.hp}</span> | SHIELD: <span style="color:#00ffff;">${player.shield}</span> | SPEED: +${player.speedItemCount} | POWER: +${player.powerItemCount} | WAVE: ${cdText}`;
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 背景グリッド
+    // 背景
     ctx.strokeStyle = "#1f1f3a"; ctx.lineWidth = 1;
     for (let x = 0; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
     for (let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 
-    // メテオ（警告エリア / 爆発）の描画
+    // メテオ
     meteors.forEach(m => {
         if (!m.exploded) {
-            ctx.strokeStyle = `rgba(255, 0, 0, ${0.3 + (90-m.timer)/90 * 0.7})`;
-            ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(m.x, m.y, m.radius, 0, Math.PI*2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 0, 0, ${0.3 + (90-m.timer)/90 * 0.7})`; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(m.x, m.y, m.radius, 0, Math.PI*2); ctx.stroke();
             ctx.fillStyle = "rgba(255, 0, 0, 0.1)"; ctx.fill();
         } else {
-            ctx.fillStyle = "rgba(255, 100, 0, 0.6)"; ctx.shadowBlur = 20; ctx.shadowColor = "#ff5500";
-            ctx.beginPath(); ctx.arc(m.x, m.y, m.radius + 10, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+            ctx.fillStyle = "rgba(255, 85, 0, 0.6)"; ctx.beginPath(); ctx.arc(m.x, m.y, m.radius + 10, 0, Math.PI*2); ctx.fill();
         }
     });
 
-    // アイテム描画
+    // アイテム
     items.forEach(item => {
-        if (item.type === "SPEED") ctx.fillStyle = "#00ffff";
-        else if (item.type === "POWER") ctx.fillStyle = "#ff0055";
-        else if (item.type === "SHIELD") ctx.fillStyle = "#00ff55";
-        ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
+        ctx.fillStyle = item.type === "SPEED" ? "#00ffff" : item.type === "POWER" ? "#ff0055" : "#00ff55";
         ctx.fillRect(item.x, item.y, item.size, item.size);
-        ctx.fillStyle = "#fff"; ctx.shadowBlur = 0; ctx.font = "10px sans-serif";
-        ctx.fillText(item.type[0], item.x + 6, item.y + 14);
+        ctx.fillStyle = "#fff"; ctx.font = "10px sans-serif"; ctx.fillText(item.type[0], item.x + 6, item.y + 14);
     });
+
+    // 弾丸の描画 (自分: 黄色, 相手: 紫)
+    ctx.fillStyle = "#ffaa00"; bullets.forEach(b => ctx.fillRect(b.x-2, b.y-2, 4, 4));
+    ctx.fillStyle = "#bd00ff"; remoteBullets.forEach(rb => ctx.fillRect(rb.x-2, rb.y-2, 4, 4));
 
     // 自分のWAVE
     if (player.waveActive) {
-        ctx.strokeStyle = "rgba(0, 255, 204, 0.6)"; ctx.lineWidth = 4; ctx.shadowBlur = 15; ctx.shadowColor = "#00ffcc";
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.6)"; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(player.x, player.y, player.waveRadius, 0, Math.PI * 2); ctx.stroke();
     }
 
     // 自分プレイヤー
     ctx.fillStyle = player.isHacked > 0 && Math.floor(player.isHacked/5)%2===0 ? "#ff0000" : "#00ff55";
-    ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle;
     ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2); ctx.fill();
+    
+    // 照準線（自分が向いている方向）
+    ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(player.x + player.lastDx*30, player.y + player.lastDy*30); ctx.stroke();
 
-    // オンラインの相手プレイヤーと【画面外レーダー】
+    // 相手プレイヤーと頭上の▼
     if (remotePlayer) {
         if (remotePlayer.waveActive) {
-            ctx.strokeStyle = "rgba(255, 0, 204, 0.5)"; ctx.lineWidth = 3; ctx.shadowBlur = 15; ctx.shadowColor = "#ff00cc";
+            ctx.strokeStyle = "rgba(255, 0, 204, 0.5)"; ctx.lineWidth = 3;
             ctx.beginPath(); ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.waveRadius, 0, Math.PI * 2); ctx.stroke();
         }
+        ctx.fillStyle = "#bd00ff"; ctx.beginPath(); ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.radius, 0, Math.PI * 2); ctx.fill();
 
-        ctx.fillStyle = "#bd00ff"; ctx.shadowBlur = 15; ctx.shadowColor = "#bd00ff";
-        ctx.beginPath(); ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.radius, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#ff0000"; ctx.beginPath();
+        let tSize = 8; let ox = remotePlayer.x; let oy = remotePlayer.y - remotePlayer.radius - 12;
+        ctx.moveTo(ox - tSize, oy - tSize); ctx.lineTo(ox + tSize, oy - tSize); ctx.lineTo(ox, oy + tSize - 4);
+        ctx.closePath(); ctx.fill();
 
-        // 頭上の▼
-        ctx.fillStyle = "#ff0000"; ctx.shadowBlur = 10; ctx.shadowColor = "#ff0000";
-        ctx.beginPath(); let triSize = 8; let offsetX = remotePlayer.x; let offsetY = remotePlayer.y - remotePlayer.radius - 12;
-        ctx.moveTo(offsetX - triSize, offsetY - triSize); ctx.lineTo(offsetX + triSize, offsetY - triSize); ctx.lineTo(offsetX, offsetY + triSize - 4);
-        ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
-
-        // 🧭 【新機能】画面外レーダーの矢印描画
+        // 画面外レーダー
         if (remotePlayer.x < 0 || remotePlayer.x > canvas.width || remotePlayer.y < 0 || remotePlayer.y > canvas.height) {
-            let edgeX = Math.max(20, Math.min(canvas.width - 20, remotePlayer.x));
-            let edgeY = Math.max(20, Math.min(canvas.height - 20, remotePlayer.y));
-            ctx.fillStyle = "#ff0000"; ctx.shadowBlur = 10; ctx.shadowColor = "#ff0000";
-            ctx.beginPath();
-            ctx.arc(edgeX, edgeY, 8, 0, Math.PI * 2); // 画面端に赤いポインターを表示
-            ctx.fill(); ctx.shadowBlur = 0;
+            ctx.fillStyle = "#ff0000"; ctx.beginPath();
+            ctx.arc(Math.max(20, Math.min(canvas.width - 20, remotePlayer.x)), Math.max(20, Math.min(canvas.height - 20, remotePlayer.y)), 8, 0, Math.PI * 2);
+            ctx.fill();
         }
+    }
+
+    // 💀 ゲームオーバー / クリアの画面描画
+    if (gameState !== "PLAY") {
+        ctx.fillStyle = "rgba(10, 10, 22, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.font = "bold 40px Courier New";
+        ctx.textAlign = "center";
+        
+        if (gameState === "GAMEOVER") {
+            ctx.fillStyle = "#ff0055";
+            ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
+        } else if (gameState === "WIN") {
+            ctx.fillStyle = "#00ffcc";
+            ctx.fillText("VICTORY!", canvas.width / 2, canvas.height / 2 - 20);
+        }
+        
+        ctx.font = "16px Courier New";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(`STATS - SPEED: +${player.speedItemCount} | POWER: +${player.powerItemCount}`, canvas.width / 2, canvas.height / 2 + 30);
+        ctx.fillStyle = "#888";
+        ctx.fillText("CLICK TO RESTART", canvas.width / 2, canvas.height / 2 + 70);
+        ctx.textAlign = "left"; // 元に戻す
     }
 }
 
