@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>シティトライアル風 2Dオンライン対戦ゲーム</title>
-    <!-- P2P通信用のライブラリPeerJSを読み込み -->
+    <title>シティトライアル風 2Dオンラインマルチバトル（最大6人）</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body {
@@ -37,44 +36,15 @@
             border: none;
             box-sizing: border-box;
         }
-        input {
-            width: 80%;
-            text-align: center;
-            background: #fff;
-            color: #000;
-        }
-        button {
-            background-color: #007aff;
-            color: white;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.2s;
-        }
+        input { width: 80%; text-align: center; background: #fff; color: #000; }
+        button { background-color: #007aff; color: white; cursor: pointer; font-weight: bold; transition: background 0.2s; }
         button:hover { background-color: #0056b3; }
         .host-btn { background-color: #34c759; }
         .host-btn:hover { background-color: #28a745; }
         
-        #connection-status {
-            color: #ffeb3b;
-            font-size: 14px;
-            margin-top: 15px;
-            min-height: 20px;
-        }
-        .error-msg {
-            color: #ff3b30 !important;
-            font-weight: bold;
-        }
-        #gameContainer {
-            position: relative;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            border-radius: 8px;
-            overflow: hidden;
-            display: none;
-        }
-        canvas {
-            display: block;
-            background-color: #33a853; 
-        }
+        #connection-status { color: #ffeb3b; font-size: 14px; margin-top: 15px; min-height: 20px; }
+        #gameContainer { position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-radius: 8px; overflow: hidden; display: none; }
+        canvas { display: block; background-color: #33a853; }
         #ui-overlay {
             position: absolute;
             top: 10px;
@@ -87,22 +57,8 @@
             font-weight: bold;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
-        .hud-panel {
-            background: rgba(0, 0, 0, 0.6);
-            padding: 10px 15px;
-            border-radius: 6px;
-            border: 1px solid #555;
-            min-width: 180px;
-        }
-        .bar-container {
-            width: 100%;
-            background: #444;
-            height: 12px;
-            border-radius: 6px;
-            margin-top: 4px;
-            overflow: hidden;
-            border: 1px solid #222;
-        }
+        .hud-panel { background: rgba(0, 0, 0, 0.6); padding: 10px 15px; border-radius: 6px; border: 1px solid #555; min-width: 180px; }
+        .bar-container { width: 100%; background: #444; height: 12px; border-radius: 6px; margin-top: 4px; overflow: hidden; border: 1px solid #222; }
         .hp-bar { width: 100%; height: 100%; background: #34c759; transition: width 0.1s; }
         .shield-bar { width: 100%; height: 100%; background: #007aff; transition: width 0.1s; }
     </style>
@@ -111,20 +67,21 @@
 
 <!-- ロビー画面 -->
 <div id="lobby">
-    <h2>⚔️ オンラインロビー ⚔️</h2>
+    <h2>⚔️ オンラインロビー (最大6人) ⚔️</h2>
     
     <div style="margin-bottom: 25px;">
-        <p style="margin-bottom:5px; color:#aaa;">① 自分で部屋を作る場合</p>
+        <p style="margin-bottom:5px; color:#aaa;">① 部屋を作る場合（ホスト）</p>
         <input type="text" id="my-room-id" placeholder="好きな部屋コードを入力">
-        <button id="create-btn" class="host-btn">部屋を作成して待機</button>
+        <button id="create-btn" class="host-btn">部屋を作成</button>
+        <button id="start-btn" style="background-color:#ff9500; display:none; margin: 10px auto 0 auto;">全員でバトル開始！</button>
     </div>
 
     <hr style="border: none; border-top: 1px dashed #555; margin: 20px 0;">
 
     <div style="margin-bottom: 15px;">
-        <p style="margin-bottom:5px; color:#aaa;">② 友達の部屋に入る場合</p>
-        <input type="text" id="join-room-id" placeholder="相手のコードを入力">
-        <button id="connect-btn">入室してバトル開始</button>
+        <p style="margin-bottom:5px; color:#aaa;">② 友達の部屋に入る場合（ゲスト）</p>
+        <input type="text" id="join-room-id" placeholder="ホストのコードを入力">
+        <button id="connect-btn">入室する</button>
     </div>
     
     <p id="connection-status">部屋コードを入力してください</p>
@@ -133,7 +90,7 @@
 <!-- ゲーム画面 -->
 <div id="gameContainer">
     <div id="ui-overlay">
-        <!-- 自分 -->
+        <!-- 自分のステータス（相手のステータス表示は削除しました） -->
         <div class="hud-panel">
             <span style="color:#ff8da1;">▼ プレイヤー (あなた)</span><br>
             HP
@@ -142,18 +99,14 @@
             <div class="bar-container"><div id="my-shield" class="shield-bar"></div></div>
             <span style="font-size:12px; color:#aaa;">🔴S:<span id="s-p">1</span> 🔵A:<span id="a-p">1</span> 🟢T:<span id="t-p">1</span></span>
         </div>
-        <!-- タイム -->
-        <div class="hud-panel" style="text-align: center; min-width: 100px;">
-            ⏱️ TIME<br><span id="timer" style="font-size:24px; color:#ffeb3b;">60</span>s
+        <!-- タイムと生存人数 -->
+        <div class="hud-panel" style="text-align: center; min-width: 120px;">
+            ⏱️ TIME: <span id="timer" style="color:#ffeb3b;">60</span>s<br>
+            👥 ALIVE: <span id="alive-count" style="color:#00ffff;">1</span>
         </div>
-        <!-- 相手 -->
+        <!-- 現在のスキル -->
         <div class="hud-panel" style="text-align: right;">
-            <span style="color:#ffcc00;">▼ ライバル (通信相手)</span><br>
-            HP
-            <div class="bar-container"><div id="enemy-hp" class="hp-bar"></div></div>
-            SHIELD
-            <div class="bar-container"><div id="enemy-shield" class="shield-bar"></div></div>
-            <span id="skill-name" style="font-size:12px; color: #ffeb3b;">スキル抽選中</span>
+            <span id="skill-name" style="font-size:14px; color: #ffeb3b;">スキル抽選中</span>
         </div>
     </div>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
@@ -163,105 +116,149 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- オンライン通信設定 (PeerJS) ---
-let peer = null; 
-let conn = null;
+// --- 通信コアロジック (スター型マルチプレイ) ---
+let peer = null;
+let myId = ""; 
 let isHost = false;
-let currentRoomId = "";
+let hostConn = null; // ゲスト用：ホストへの接続
+const guestConns = {}; // ホスト用：参加している全ゲストの接続（ID -> conn）
+let gameStarted = false;
 
 const statusEl = document.getElementById('connection-status');
+const startBtn = document.getElementById('start-btn');
 
-// 部屋作成
+// ホストとして部屋作成
 document.getElementById('create-btn').addEventListener('click', () => {
     const roomId = document.getElementById('my-room-id').value.trim();
-    if (!roomId) { return statusEl.innerText = "部屋コードを入力してください。"; }
-    statusEl.innerText = "部屋をチェック中...";
+    if (!roomId) return statusEl.innerText = "部屋コードを入力してください。";
     if (peer) peer.destroy();
 
     peer = new Peer(roomId);
-    currentRoomId = roomId;
-
     peer.on('open', (id) => {
         isHost = true;
-        statusEl.innerHTML = `部屋「<span style='color:#34c759;'>${id}</span>」を作成しました！<br>友達の入室を待っています...`;
+        myId = id;
+        statusEl.innerHTML = `部屋「<span style='color:#34c759;'>${id}</span>」を作成しました！<br>メンバーを待っています（現在: 1人）`;
+        startBtn.style.display = "block";
     });
-    peer.on('connection', (connection) => {
-        if (conn) return; 
-        conn = connection;
-        setupChat();
-    });
-    peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-            statusEl.innerText = `エラー：コード「${currentRoomId}」はすでに使用されています。`;
+
+    peer.on('connection', (conn) => {
+        if (Object.keys(guestConns).length >= 5 || gameStarted) {
+            conn.on('open', () => { conn.send({type: 'rejected'}); setTimeout(() => conn.close(), 500); });
+            return;
         }
+        guestConns[conn.peer] = conn;
+        setupHostConnection(conn);
     });
 });
 
-// 部屋入室
+// ゲストとして参戦
 document.getElementById('connect-btn').addEventListener('click', () => {
     const targetId = document.getElementById('join-room-id').value.trim();
-    if (!targetId) { return statusEl.innerText = "相手の部屋コードを入力してください。"; }
-    statusEl.innerText = "接続中...";
+    if (!targetId) return statusEl.innerText = "相手の部屋コードを入力してください。";
     if (peer) peer.destroy();
 
     peer = new Peer();
-    peer.on('open', () => {
-        conn = peer.connect(targetId);
-        isHost = false;
-        setupChat();
-    });
-    peer.on('error', (err) => {
-        statusEl.innerText = "接続に失敗しました。コードを確認してください。";
+    peer.on('open', (id) => {
+        myId = id;
+        hostConn = peer.connect(targetId);
+        setupGuestConnection(hostConn);
     });
 });
 
-function setupChat() {
+// ホスト側の通信処理（全員のデータを取りまとめる）
+function setupHostConnection(conn) {
     conn.on('open', () => {
-        document.getElementById('lobby').style.display = 'none';
-        document.getElementById('gameContainer').style.display = 'block';
-        initGame();
+        updateHostLobbyText();
+        // 新しいプレイヤーを生成
+        players[conn.peer] = createNewPlayer(conn.peer);
     });
-
+    conn.on('close', () => {
+        delete guestConns[conn.peer];
+        delete players[conn.peer];
+        updateHostLobbyText();
+    });
     conn.on('data', (data) => {
-        if (data.type === 'sync') {
-            enemy.x = data.x; enemy.y = data.y; enemy.angle = data.angle;
-            enemy.hp = data.hp; enemy.shield = data.shield;
-            enemy.isCharging = data.isCharging; enemy.charge = data.charge;
-            enemy.invincibleTimer = data.invincibleTimer;
-            enemy.skillId = data.skillId; // 相手のスキル状態を同期
+        if (data.type === 'client_update') {
+            if (players[conn.peer]) {
+                Object.assign(players[conn.peer], data.state);
+            }
         }
-        if (data.type === 'shoot') {
-            // 相手が撃った弾を「敵の弾(isEnemy: true)」として追加
-            projectiles.push({
-                x: data.x, y: data.y, vx: data.vx, vy: data.vy,
-                radius: data.radius, color: data.color, life: data.life, isEnemy: true
-            });
+        if (data.type === 'client_shoot') {
+            // ホストが弾を生成して全員に配信
+            projectiles.push({ ...data.pData, id: Math.random(), owner: conn.peer });
         }
-        if (data.type === 'item_take') {
+        if (data.type === 'client_item_take') {
             items.splice(data.index, 1);
             spawnItem();
         }
     });
 }
 
-// --- ゲームオブジェクト設定 ---
-const MAP_SIZE = 2000; 
+function updateHostLobbyText() {
+    statusEl.innerHTML = `部屋コード: <span style='color:#34c759;'>${myId}</span><br>参加人数: ${Object.keys(guestConns).length + 1} / 6人`;
+}
+
+// ゲスト側の通信処理
+function setupGuestConnection(conn) {
+    conn.on('open', () => {
+        statusEl.innerText = "入室しました！ホストが開始するのを待っています...";
+    });
+    conn.on('data', (data) => {
+        if (data.type === 'rejected') {
+            statusEl.innerText = "部屋が満員、または既にゲームが始まっています。";
+        }
+        if (data.type === 'start') {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('gameContainer').style.display = 'block';
+            gameStarted = true;
+            initGame(data.mapSeed);
+        }
+        if (data.type === 'host_sync') {
+            // 全員の座標・状態を同期
+            for (let id in data.players) {
+                if (id === myId) {
+                    // 自分自身のHP/シールド等、被弾結果の同期
+                    players[myId].hp = data.players[id].hp;
+                    players[myId].shield = data.players[id].shield;
+                } else {
+                    if (!players[id]) players[id] = createNewPlayer(id);
+                    Object.assign(players[id], data.players[id]);
+                }
+            }
+            // 死亡して消えたプレイヤーの削除
+            for (let id in players) {
+                if (!data.players[id]) delete players[id];
+            }
+            // 弾とアイテムの同期
+            projectiles.length = 0;
+            data.projectiles.forEach(p => projectiles.push(p));
+            items.length = 0;
+            data.items.forEach(i => items.push(i));
+            timeLeft = data.timeLeft;
+            document.getElementById('timer').innerText = timeLeft;
+        }
+    });
+}
+
+// ホストの開始ボタン
+startBtn.addEventListener('click', () => {
+    if (!isHost) return;
+    gameStarted = true;
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('gameContainer').style.display = 'block';
+    
+    const seed = myId + Math.random();
+    initGame(seed);
+
+    for (let id in guestConns) {
+        guestConns[id].send({ type: 'start', mapSeed: seed });
+    }
+});
+
+// --- ゲームオブジェクトとロジック ---
+const MAP_SIZE = 2000;
 let timeLeft = 60;
-
-const player = {
-    x: 0, y: 0, vx: 0, vy: 0, angle: 0, radius: 18,
-    baseSpeed: 5, accelRate: 0.4, friction: 0.94,
-    patchSpeed: 0, patchAccel: 0, patchTurn: 0,
-    charge: 0, maxCharge: 100, isCharging: false, dashTimer: 0,
-    hp: 100, maxHp: 100, shield: 100, maxShield: 100,
-    skill: null, skillCooldown: 0, invincibleTimer: 0
-};
-
-const enemy = { 
-    x: 0, y: 0, angle: 0, radius: 18, 
-    hp: 100, shield: 100, isCharging: false, charge: 0, 
-    invincibleTimer: 0, skillId: null 
-};
+const players = {}; // 全参加者のデータ（自分も含む { id: playerObj }）
 
 const SKILLS = [
     { id: 'plasma', name: 'プラズマウェーブ', color: '#00ffff' },
@@ -270,18 +267,28 @@ const SKILLS = [
 ];
 const items = []; const buildings = []; const projectiles = []; const keys = { w: false, a: false, s: false, d: false, Space: false, f: false };
 
-function generateMap() {
+function createNewPlayer(id) {
+    return {
+        id: id, x: Math.random() * 1400 + 300, y: Math.random() * 1400 + 300,
+        vx: 0, vy: 0, angle: 0, radius: 18, baseSpeed: 5, accelRate: 0.4, friction: 0.94,
+        patchSpeed: 0, patchAccel: 0, patchTurn: 0, charge: 0, maxCharge: 100, isCharging: false, dashTimer: 0,
+        hp: 100, maxHp: 100, shield: 100, maxShield: 100, skillCooldown: 0, invincibleTimer: 0, skillId: 'plasma'
+    };
+}
+
+function generateMap(seed) {
     buildings.length = 0;
-    let seed = isHost ? currentRoomId : conn.peer;
     let num = 0;
-    if (seed) { for(let i=0; i<seed.length; i++) num += seed.charCodeAt(i); } else { num = 12345; }
-    
+    for(let i=0; i<seed.length; i++) num += seed.charCodeAt(i);
     for (let i = 0; i < 40; i++) {
         num = (num * 9301 + 49297) % 233280; let rand1 = num / 233280;
         num = (num * 9301 + 49297) % 233280; let rand2 = num / 233280;
         buildings.push({ x: rand1 * (MAP_SIZE - 200) + 100, y: rand2 * (MAP_SIZE - 200) + 100, w: 120, h: 120 });
     }
-    for (let i = 0; i < 40; i++) spawnItem();
+    if (isHost) {
+        items.length = 0;
+        for (let i = 0; i < 40; i++) spawnItem();
+    }
 }
 
 function spawnItem() {
@@ -292,26 +299,31 @@ function spawnItem() {
     });
 }
 
-function initGame() {
-    player.skill = SKILLS[Math.floor(Math.random() * SKILLS.length)];
-    document.getElementById('skill-name').innerText = "あなたのスキル: " + player.skill.name;
-    document.getElementById('skill-name').style.color = player.skill.color;
+function initGame(mapSeed) {
+    // 自分のプレイヤーを作成して登録
+    players[myId] = createNewPlayer(myId);
+    const mySkill = SKILLS[Math.floor(Math.random() * SKILLS.length)];
+    players[myId].skillId = mySkill.id;
 
-    if (isHost) { player.x = 300; player.y = 300; enemy.x = 1700; enemy.y = 1700; } 
-    else { player.x = 1700; player.y = 1700; enemy.x = 300; enemy.y = 300; }
+    document.getElementById('skill-name').innerText = "あなたのスキル: " + mySkill.name;
+    document.getElementById('skill-name').style.color = mySkill.color;
 
-    generateMap();
-    startTimer();
+    generateMap(mapSeed);
+    if (isHost) startTimer();
     requestAnimationFrame(update);
 }
 
 function startTimer() {
     const timerInterval = setInterval(() => {
-        if (timeLeft > 0 && player.hp > 0 && enemy.hp > 0) { timeLeft--; document.getElementById('timer').innerText = timeLeft; } 
-        else { clearInterval(timerInterval); }
+        if (timeLeft > 0 && Object.keys(players).length > 1) { 
+            timeLeft--; 
+        } else { 
+            clearInterval(timerInterval); 
+        }
     }, 1000);
 }
 
+// キーイベント
 window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyW') keys.w = true; if (e.code === 'KeyS') keys.s = true;
     if (e.code === 'KeyA') keys.a = true; if (e.code === 'KeyD') keys.d = true;
@@ -325,185 +337,203 @@ window.addEventListener('keyup', (e) => {
     if (e.code === 'KeyF') keys.f = false;
 });
 
-// --- スキルの発動と通信送信 ---
 function useSkill() {
-    if (player.skillCooldown > 0 || timeLeft <= 0 || player.hp <= 0) return;
-    let pData = null;
+    const me = players[myId];
+    if (!me || me.skillCooldown > 0 || timeLeft <= 0 || me.hp <= 0) return;
 
-    if (player.skill.id === 'plasma') {
-        // 前方に強力な高速弾を発射（直撃30ダメ）
-        pData = { x: player.x, y: player.y, vx: Math.cos(player.angle) * 16, vy: Math.sin(player.angle) * 16, radius: 14, color: '#00ffff', life: 40, damage: 30 };
-        projectiles.push({...pData, isEnemy: false});
-        if(conn) conn.send({type: 'shoot', ...pData});
-        player.skillCooldown = 60;
+    if (me.skillId === 'plasma') {
+        const pData = { x: me.x, y: me.y, vx: Math.cos(me.angle) * 16, vy: Math.sin(me.angle) * 16, radius: 14, color: '#00ffff', life: 40, damage: 30 };
+        if (isHost) { projectiles.push({ ...pData, id: Math.random(), owner: myId }); } 
+        else { hostConn.send({ type: 'client_shoot', pData: pData }); }
+        me.skillCooldown = 60;
     } 
-    else if (player.skill.id === 'freeze') {
-        // 全方位に吹雪を拡散（1発15ダメ）
+    else if (me.skillId === 'freeze') {
         for (let angle = 0; angle < Math.PI * 2; angle += 0.6) {
-            pData = { x: player.x, y: player.y, vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7, radius: 10, color: '#a3e5ff', life: 30, damage: 15 };
-            projectiles.push({...pData, isEnemy: false});
-            if(conn) conn.send({type: 'shoot', ...pData});
+            const pData = { x: me.x, y: me.y, vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7, radius: 10, color: '#a3e5ff', life: 30, damage: 15 };
+            if (isHost) { projectiles.push({ ...pData, id: Math.random(), owner: myId }); } 
+            else { hostConn.send({ type: 'client_shoot', pData: pData }); }
         }
-        player.skillCooldown = 120;
+        me.skillCooldown = 120;
     } 
-    else if (player.skill.id === 'wheel') {
-        // ホイール化：高速突進＆無敵化（体当たり判定はupdate内で処理）
-        player.invincibleTimer = 100; 
-        player.dashTimer = 35; 
-        player.vx = Math.cos(player.angle) * 22; 
-        player.vy = Math.sin(player.angle) * 22;
-        player.skillCooldown = 200;
+    else if (me.skillId === 'wheel') {
+        me.invincibleTimer = 100; me.dashTimer = 35; 
+        me.vx = Math.cos(me.angle) * 22; me.vy = Math.sin(me.angle) * 22;
+        me.skillCooldown = 200;
     }
 }
 
 function triggerChargeDash() {
-    if (player.charge > 10) {
-        const dashPower = (player.charge / 100) * (9 + player.patchAccel * 1.5);
-        player.vx = Math.cos(player.angle) * dashPower; player.vy = Math.sin(player.angle) * dashPower; player.dashTimer = 20;
+    const me = players[myId];
+    if (!me) return;
+    if (me.charge > 10) {
+        const dashPower = (me.charge / 100) * (9 + me.patchAccel * 1.5);
+        me.vx = Math.cos(me.angle) * dashPower; me.vy = Math.sin(me.angle) * dashPower; me.dashTimer = 20;
     }
-    player.charge = 0; player.isCharging = false;
+    me.charge = 0; me.isCharging = false;
 }
 
-// 【重要】自分自身が受けるダメージの計算
-function damagePlayer(amount) {
-    if (player.invincibleTimer > 0 || player.hp <= 0) return; // 無敵中や死亡時は無効
-    
-    if (player.shield > 0) {
-        player.shield -= amount;
-        if (player.shield < 0) {
-            player.hp += player.shield; // シールドを超えた分をHPから引く
-            player.shield = 0;
-        }
-    } else {
-        player.hp -= amount;
-    }
-    player.hp = Math.max(0, player.hp);
+function damagePlayer(playerObj, amount) {
+    if (playerObj.invincibleTimer > 0 || playerObj.hp <= 0) return;
+    if (playerObj.shield > 0) {
+        playerObj.shield -= amount;
+        if (playerObj.shield < 0) { playerObj.hp += playerObj.shield; playerObj.shield = 0; }
+    } else { playerObj.hp -= amount; }
+    playerObj.hp = Math.max(0, playerObj.hp);
 }
 
 function update() {
-    if (timeLeft <= 0 || player.hp <= 0 || enemy.hp <= 0) return drawEndScreen();
+    const me = players[myId];
+    const aliveCount = Object.values(players).filter(p => p.hp > 0).length;
+    document.getElementById('alive-count').innerText = aliveCount;
 
-    if (player.skillCooldown > 0) player.skillCooldown--;
-    if (player.invincibleTimer > 0) player.invincibleTimer--;
-    if (player.dashTimer > 0) player.dashTimer--;
-    if (player.shield < player.maxShield && !keys.Space) player.shield = Math.min(player.maxShield, player.shield + 0.05);
+    // ゲーム終了判定 (タイムアップ、または自分が死亡、または自分以外の生存者が0)
+    if (timeLeft <= 0 || !me || me.hp <= 0 || (aliveCount === 1 && me.hp > 0)) {
+        return drawEndScreen(me, aliveCount);
+    }
+
+    // --- 自機の移動・更新処理 ---
+    if (me.skillCooldown > 0) me.skillCooldown--;
+    if (me.invincibleTimer > 0) me.invincibleTimer--;
+    if (me.dashTimer > 0) me.dashTimer--;
+    if (me.shield < me.maxShield && !keys.Space) me.shield = Math.min(me.maxShield, me.shield + 0.05);
 
     let ax = 0, ay = 0;
-    const currentAccel = player.accelRate + (player.patchAccel * 0.1);
+    const currentAccel = me.accelRate + (me.patchAccel * 0.1);
     if (keys.w) ay -= currentAccel; if (keys.s) ay += currentAccel;
     if (keys.a) ax -= currentAccel; if (keys.d) ax += currentAccel;
 
     if (keys.Space) {
-        player.isCharging = true; ax = 0; ay = 0;
-        let currentSpeed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
-        if (currentSpeed < 4.5) player.charge = Math.min(player.maxCharge, player.charge + 2.5);
+        me.isCharging = true; ax = 0; ay = 0;
+        let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy);
+        if (currentSpeed < 4.5) me.charge = Math.min(me.maxCharge, me.charge + 2.5);
     }
+    if (me.invincibleTimer > 0 && me.skillId === 'wheel') { ax += Math.cos(me.angle) * 1.5; ay += Math.sin(me.angle) * 1.5; }
 
-    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') {
-        ax += Math.cos(player.angle) * 1.5; ay += Math.sin(player.angle) * 1.5;
-    }
+    me.vx += ax; me.vy += ay;
+    if ((!keys.w && !keys.s && !keys.a && !keys.d) || keys.Space) { me.vx *= me.friction; me.vy *= me.friction; }
 
-    player.vx += ax; player.vy += ay;
-    if ((!keys.w && !keys.s && !keys.a && !keys.d) || keys.Space) { player.vx *= player.friction; player.vy *= player.friction; }
+    let currentMaxSpeed = me.baseSpeed + (me.patchSpeed * 1.5);
+    if (me.invincibleTimer > 0 && me.skillId === 'wheel') currentMaxSpeed *= 2.5;
+    const speed = Math.sqrt(me.vx * me.vx + me.vy * me.vy);
+    if (speed > currentMaxSpeed && me.dashTimer <= 0) { me.vx = (me.vx / speed) * currentMaxSpeed; me.vy = (me.vy / speed) * currentMaxSpeed; }
 
-    let currentMaxSpeed = player.baseSpeed + (player.patchSpeed * 1.5);
-    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') currentMaxSpeed *= 2.5;
-    const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
-    if (speed > currentMaxSpeed && player.dashTimer <= 0) { player.vx = (player.vx / speed) * currentMaxSpeed; player.vy = (player.vy / speed) * currentMaxSpeed; }
+    me.x += me.vx; me.y += me.vy;
+    me.x = Math.max(me.radius, Math.min(MAP_SIZE - me.radius, me.x));
+    me.y = Math.max(me.radius, Math.min(MAP_SIZE - me.radius, me.y));
 
-    player.x += player.vx; player.y += player.vy;
-    player.x = Math.max(player.radius, Math.min(MAP_SIZE - player.radius, player.x));
-    player.y = Math.max(player.radius, Math.min(MAP_SIZE - player.radius, player.y));
-
-    if (Math.abs(player.vx) > 0.1 || Math.abs(player.vy) > 0.1) {
-        let targetAngle = player.angle;
+    if (Math.abs(me.vx) > 0.1 || Math.abs(me.vy) > 0.1) {
+        let targetAngle = me.angle;
         if (keys.w || keys.s || keys.a || keys.d) {
             let inputX = 0, inputY = 0;
             if (keys.w) inputY -= 1; if (keys.s) inputY += 1;
             if (keys.a) inputX -= 1; if (keys.d) inputX += 1;
             targetAngle = Math.atan2(inputY, inputX);
-        } else { targetAngle = Math.atan2(player.vy, player.vx); }
-        const turnSpeed = 0.12 + (player.patchTurn * 0.04);
-        let diff = targetAngle - player.angle;
+        } else { targetAngle = Math.atan2(me.vy, me.vx); }
+        const turnSpeed = 0.12 + (me.patchTurn * 0.04);
+        let diff = targetAngle - me.angle;
         while (diff < -Math.PI) diff += Math.PI * 2;
         while (diff > Math.PI) diff -= Math.PI * 2;
-        player.angle += diff * turnSpeed;
+        me.angle += diff * turnSpeed;
     }
 
-    // 【新規】ホイールダッシュによる「体当たり」当たり判定
-    // 相手がホイールスキル中かつ、自分との距離が衝突半径以下の場合、大ダメージを受ける
-    if (enemy.invincibleTimer > 0 && enemy.skillId === 'wheel') {
-        let edx = player.x - enemy.x;
-        let edy = player.y - enemy.y;
-        let dist = Math.sqrt(edx * edx + edy * edy);
-        if (dist < player.radius + enemy.radius) {
-            damagePlayer(1.5); // 多段ヒットするためフレーム毎に少しずつ削る
-            // 吹き飛ばし演出（ノックバック）
-            player.vx += (edx / dist) * 2;
-            player.vy += (edy / dist) * 2;
-        }
-    }
-
+    // 壁との衝突判定
     buildings.forEach(b => {
-        if (player.x + player.radius > b.x && player.x - player.radius < b.x + b.w && player.y + player.radius > b.y && player.y - player.radius < b.y + b.h) {
-            const fL = player.x - b.x, fR = (b.x + b.w) - player.x, fT = player.y - b.y, fB = (b.y + b.h) - player.y; const m = Math.min(fL, fR, fT, fB);
-            if (m === fL) { player.x = b.x - player.radius; player.vx *= -0.4; }
-            else if (m === fR) { player.x = b.x + b.w + player.radius; player.vx *= -0.4; }
-            else if (m === fT) { player.y = b.y - player.radius; player.vy *= -0.4; }
-            else if (m === fB) { player.y = b.y + b.h + player.radius; player.vy *= -0.4; }
+        if (me.x + me.radius > b.x && me.x - me.radius < b.x + b.w && me.y + me.radius > b.y && me.y - me.radius < b.y + b.h) {
+            const fL = me.x - b.x, fR = (b.x + b.w) - me.x, fT = me.y - b.y, fB = (b.y + b.h) - me.y; const m = Math.min(fL, fR, fT, fB);
+            if (m === fL) { me.x = b.x - me.radius; me.vx *= -0.4; }
+            else if (m === fR) { me.x = b.x + b.w + me.radius; me.vx *= -0.4; }
+            else if (m === fT) { me.y = b.y - me.radius; me.vy *= -0.4; }
+            else if (m === fB) { me.y = b.y + b.h + me.radius; me.vy *= -0.4; }
         }
     });
 
+    // アイテム取得判定
     for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i]; const dx = player.x - item.x, dy = player.y - item.y;
-        if (Math.sqrt(dx * dx + dy * dy) < player.radius + item.radius) {
-            if (item.type === 'speed') { player.patchSpeed++; document.getElementById('s-p').innerText = player.patchSpeed+1;}
-            if (item.type === 'accel') { player.patchAccel++; document.getElementById('a-p').innerText = player.patchAccel+1;}
-            if (item.type === 'turn') { player.patchTurn++; document.getElementById('t-p').innerText = player.patchTurn+1;}
-            if(conn) conn.send({type: 'item_take', index: i});
-            items.splice(i, 1); spawnItem();
+        const item = items[i]; const dx = me.x - item.x, dy = me.y - item.y;
+        if (Math.sqrt(dx * dx + dy * dy) < me.radius + item.radius) {
+            if (item.type === 'speed') { me.patchSpeed++; document.getElementById('s-p').innerText = me.patchSpeed+1;}
+            if (item.type === 'accel') { me.patchAccel++; document.getElementById('a-p').innerText = me.patchAccel+1;}
+            if (item.type === 'turn') { me.patchTurn++; document.getElementById('t-p').innerText = me.patchTurn+1;}
+            if (isHost) { items.splice(i, 1); spawnItem(); } 
+            else { hostConn.send({type: 'client_item_take', index: i}); }
         }
     }
 
-    // 【新規】弾の当たり判定処理
-    projectiles.forEach((p, idx) => {
-        p.x += p.vx; p.y += p.vy; p.life--;
-        
-        if (p.isEnemy) {
-            let dx = player.x - p.x;
-            let dy = player.y - p.y;
-            // 敵の弾が自分の体にぶつかったか
-            if (Math.sqrt(dx * dx + dy * dy) < player.radius + p.radius) {
-                damagePlayer(p.damage || 20); // 設定されたダメージ分削る
-                projectiles.splice(idx, 1); // 弾を消滅させる
-                return;
+    // --- 【ホストのみ】弾の移動、ホイール体当たり、死亡処理の演算 ---
+    if (isHost) {
+        // 弾の移動と判定
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            const p = projectiles[i];
+            p.x += p.vx; p.y += p.vy; p.life--;
+            
+            // 全プレイヤーとの当たり判定
+            for (let id in players) {
+                if (p.owner === id) continue; // 自分が撃った弾は当たらない
+                const pObj = players[id];
+                let dx = pObj.x - p.x; let dy = pObj.y - p.y;
+                if (Math.sqrt(dx * dx + dy * dy) < pObj.radius + p.radius) {
+                    damagePlayer(pObj, p.damage || 20);
+                    projectiles.splice(i, 1);
+                    break;
+                }
+            }
+            if (p.life <= 0 && projectiles[i]) projectiles.splice(i, 1);
+        }
+
+        // ホイールダッシュの体当たり判定（全員分をクロスチェック）
+        for (let attackerId in players) {
+            const attacker = players[attackerId];
+            if (attacker.invincibleTimer > 0 && attacker.skillId === 'wheel') {
+                for (let victimId in players) {
+                    if (attackerId === victimId) continue;
+                    const victim = players[victimId];
+                    let edx = victim.x - attacker.x; let edy = victim.y - attacker.y;
+                    let dist = Math.sqrt(edx * edx + edy * edy);
+                    if (dist < victim.radius + attacker.radius) {
+                        damagePlayer(victim, 1.2);
+                        victim.vx += (edx / dist) * 1.5; victim.vy += (edy / dist) * 1.5;
+                    }
+                }
             }
         }
-        if(p.life <= 0) projectiles.splice(idx, 1);
-    });
 
-    // 自分のデータを相手に送信（スキルIDも追加）
-    if (conn && conn.open) {
-        conn.send({
-            type: 'sync', x: player.x, y: player.y, angle: player.angle, hp: player.hp, shield: player.shield,
-            isCharging: player.isCharging, charge: player.charge, invincibleTimer: player.invincibleTimer,
-            skillId: player.skill.id
-        });
+        // 体力0のプレイヤーを退場させる
+        for (let id in players) {
+            if (players[id].hp <= 0) delete players[id];
+        }
+
+        // ホストから全員へ同期データをブロードキャスト
+        const syncData = {
+            type: 'host_sync', players: players, projectiles: projectiles, items: items, timeLeft: timeLeft
+        };
+        for (let id in guestConns) {
+            if (guestConns[id].open) guestConns[id].send(syncData);
+        }
+    } else {
+        // ゲストは自分の状態をホストにひたすら送信
+        if (hostConn && hostConn.open) {
+            hostConn.send({
+                type: 'client_update',
+                state: { x: me.x, y: me.y, angle: me.angle, isCharging: me.isCharging, charge: me.charge, invincibleTimer: me.invincibleTimer, skillId: me.skillId }
+            });
+        }
     }
 
-    // UIゲージのリアルタイム更新
-    document.getElementById('my-hp').style.width = player.hp + '%'; document.getElementById('my-shield').style.width = player.shield + '%';
-    document.getElementById('enemy-hp').style.width = enemy.hp + '%'; document.getElementById('enemy-shield').style.width = enemy.shield + '%';
+    // UI更新（自分のみ）
+    document.getElementById('my-hp').style.width = me.hp + '%';
+    document.getElementById('my-shield').style.width = me.shield + '%';
 
-    // 描画処理
+    // --- 描画 ---
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const cameraX = player.x - canvas.width / 2; const cameraY = player.y - canvas.height / 2;
+    const cameraX = me.x - canvas.width / 2; const cameraY = me.y - canvas.height / 2;
     ctx.save(); ctx.translate(-cameraX, -cameraY);
 
+    // グリッド線
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     for (let x = 0; x <= MAP_SIZE; x += 100) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); ctx.stroke(); }
     for (let y = 0; y <= MAP_SIZE; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke(); }
 
+    // 障害物・アイテム・弾
     ctx.fillStyle = '#7a7a7a'; buildings.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
     items.forEach(item => {
         ctx.beginPath(); ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
@@ -511,36 +541,49 @@ function update() {
     });
     projectiles.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill(); });
 
-    // 自分
-    ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
-    if (player.isCharging) { ctx.beginPath(); ctx.arc(0, 0, player.radius + (player.charge/3), 0, Math.PI*2); ctx.fillStyle = 'rgba(255,235,59,0.3)'; ctx.fill(); }
-    // ホイールスキル中のオーラ演出
-    if (player.invincibleTimer > 0 && player.skill.id === 'wheel') { ctx.beginPath(); ctx.arc(0, 0, player.radius + 6, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,87,34,0.4)'; ctx.fill(); }
-    ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI * 2); ctx.fillStyle = '#ff8da1'; ctx.fill();
-    ctx.fillStyle = '#333'; ctx.fillRect(5, -6, 8, 12); ctx.restore();
-
-    // 相手
-    ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(enemy.angle);
-    if (enemy.isCharging) { ctx.beginPath(); ctx.arc(0, 0, enemy.radius + (enemy.charge/3), 0, Math.PI*2); ctx.fillStyle = 'rgba(30,144,255,0.3)'; ctx.fill(); }
-    // 相手がホイールスキル中のオーラ演出
-    if (enemy.invincibleTimer > 0 && enemy.skillId === 'wheel') { ctx.beginPath(); ctx.arc(0, 0, enemy.radius + 6, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,87,34,0.4)'; ctx.fill(); }
-    ctx.beginPath(); ctx.arc(0, 0, enemy.radius, 0, Math.PI * 2); ctx.fillStyle = '#ffcc00'; ctx.fill();
-    ctx.fillStyle = '#333'; ctx.fillRect(5, -6, 8, 12); ctx.restore();
+    // 全プレイヤーの描画（相手のHPゲージは出さない）
+    for (let id in players) {
+        const pObj = players[id];
+        ctx.save(); ctx.translate(pObj.x, pObj.y); ctx.rotate(pObj.angle);
+        
+        // チャージエフェクト
+        if (pObj.isCharging) {
+            ctx.beginPath(); ctx.arc(0, 0, pObj.radius + (pObj.charge/3), 0, Math.PI*2);
+            ctx.fillStyle = id === myId ? 'rgba(255,235,59,0.3)' : 'rgba(30,144,255,0.2)'; ctx.fill();
+        }
+        // ホイールオーラ
+        if (pObj.invincibleTimer > 0 && pObj.skillId === 'wheel') {
+            ctx.beginPath(); ctx.arc(0, 0, pObj.radius + 6, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,87,34,0.4)'; ctx.fill();
+        }
+        
+        // 本体
+        ctx.beginPath(); ctx.arc(0, 0, pObj.radius, 0, Math.PI * 2);
+        ctx.fillStyle = id === myId ? '#ff8da1' : '#ffcc00'; // 自分はピンク、他人は黄色
+        ctx.fill();
+        ctx.fillStyle = '#333'; ctx.fillRect(5, -6, 8, 12); // 向き用の目印
+        ctx.restore();
+    }
 
     ctx.restore();
     requestAnimationFrame(update);
 }
 
-function drawEndScreen() {
+function drawEndScreen(me, aliveCount) {
     ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#ffeb3b'; ctx.font = 'bold 40px sans-serif'; ctx.textAlign = 'center';
+    
     let resultText = "試合終了！";
-    if (player.hp <= 0) resultText = "❌ あなたの敗北... ❌";
-    else if (enemy.hp <= 0) resultText = "👑 あなたの勝利！ 👑";
-    else resultText = "⏱️ タイムアップ！ ⏱️";
+    if (!me || me.hp <= 0) {
+        resultText = "❌ 大破しました... ❌";
+    } else if (aliveCount === 1 && me.hp > 0) {
+        resultText = "👑 あなたの単独勝利！ 👑";
+    } else {
+        resultText = "⏱️ タイムアップ！ ⏱️";
+    }
+    
     ctx.fillText(resultText, canvas.width / 2, canvas.height / 2 - 20);
     ctx.fillStyle = '#fff'; ctx.font = '18px sans-serif';
-    ctx.fillText("ページを再読み込みすると新しく部屋を作成できます。", canvas.width / 2, canvas.height / 2 + 50);
+    ctx.fillText("リロードすると新しく部屋を作成・入室できます。", canvas.width / 2, canvas.height / 2 + 50);
 }
 </script>
 
